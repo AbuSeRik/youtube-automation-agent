@@ -20,12 +20,12 @@ Research topics → write scripts → generate narration and visuals → assembl
 
 - **DarkzSEO Discoverability Preflight:** send a canonical content package—not the private dashboard—through versioned GEO, AIO, AEO, and web-search checks after metadata and provenance are assembled.
 - **Reviewable evidence:** persist stable rule IDs, severity, engine/schema identity, fingerprints, and operator decisions in SQLite. Keep a finding actionable or dismiss a false positive with a reason that carries into matching future audits.
-- **Safe local adapter boundary:** invoke DarkzSEO through JSON-only stdin/stdout without a shell or inherited API secrets. Missing Python, timeouts, and schema drift stay explicit and non-blocking.
+- **Safe local adapter boundary:** run the bundled content checks without Python; optional external DarkzSEO checkouts still use JSON-only stdin/stdout without a shell or inherited API secrets.
 - **Controlled Growth Experiments Studio:** rotate only approved title/thumbnail arms, measure real interval evidence, restore the control, and require a separate decision before adopting a winner.
 - **Outcome & ROI Studio:** align the operator with a measurable KPI, target window, budget, and available revenue/cost evidence without converting missing economics into false zeroes.
 - **Platform-ready foundation:** audits already retain their target platform, providing the durable contract for planned TikTok and Instagram/Reels publishing and analytics adapters.
 
-DarkzSEO is optional. Install DarkzSEO 1.4+ into Python or set `DARKZSEO_PATH`; when it is unavailable, AgentTube records the reason and keeps the existing approval workflow operational.
+The content preflight works out of the box. Set `DARKZSEO_PATH` only when developing against a separate DarkzSEO 1.4+ checkout.
 
 See the complete release history in [CHANGELOG.md](CHANGELOG.md).
 
@@ -97,17 +97,17 @@ Use the altered or synthetic media control only when the video contains realisti
 
 ### Review discoverability guidance
 
-Every saved production receives an optional **DarkzSEO Discoverability Preflight** in Review Studio after metadata and provenance are assembled. The adapter sends a canonical content package—not the private dashboard—to DarkzSEO's versioned JSON API and stores the engine version, schema version, severity summary, stable rule IDs, and individual findings in SQLite.
+Every saved production receives an optional **DarkzSEO Discoverability Preflight** in Review Studio after metadata and provenance are assembled. The bundled content auditor reviews a canonical content package—not the private dashboard—and stores the engine version, schema version, severity summary, stable rule IDs, and individual findings in SQLite.
 
-Findings are advisory in this release. Keep a useful recommendation as actionable, or dismiss a false positive with a reviewer reason that carries forward to matching findings on later audits. Missing Python, an unavailable DarkzSEO installation, timeouts, and schema mismatches remain explicit without blocking publication or silently changing scripts and metadata.
+Findings are advisory in this release. Keep a useful recommendation as actionable, or dismiss a false positive with a reviewer reason that carries forward to matching findings on later audits. The bundled audit requires no Python package and never silently changes scripts or metadata.
 
-For local development with a sibling checkout:
+To test a separate DarkzSEO 1.4+ checkout instead of the bundled auditor:
 
 ```bash
-python -m pip install -e ../darkzseo
+DARKZSEO_PATH=../darkzseo/darkzseo.py npm start
 ```
 
-Alternatively set `DARKZSEO_PATH` to `darkzseo.py`. The adapter uses a shell-free Python child process, sends content JSON over stdin, and reads JSON-only stdout. DarkzSEO 1.4 or newer is required.
+The optional external adapter uses a shell-free Python child process, sends content JSON over stdin, and reads JSON-only stdout. The public PyPI `darkzseo` 1.3.3 package has a different site-audit CLI and is not used by AgentTube.
 
 ### What you need
 
@@ -115,7 +115,7 @@ Alternatively set `DARKZSEO_PATH` to `darkzseo.py`. The adapter uses a shell-fre
 - A Google account and YouTube Data API credentials
 - At least one AI text provider key
 - FFmpeg, installed automatically through `ffmpeg-static`
-- Python 3.9+ and DarkzSEO 1.4+ for the optional discoverability preflight
+- Python 3.9+ only when explicitly testing an external DarkzSEO checkout
 
 Gemini offers free access for supported text and TTS usage. Gemini AI image generation currently requires paid-tier access; without an image provider, Lumen can assemble gradient-based visuals instead.
 
@@ -266,8 +266,8 @@ Long-form productions use hybrid assembly: Lumen generates bounded provider clip
 
 1. Create a project in [Google Cloud Console](https://console.cloud.google.com/)
 2. Enable **YouTube Data API v3**
-3. Create an OAuth 2.0 client (Desktop app)
-4. Save the JSON as `config/credentials.json`
+3. Create an OAuth 2.0 client (**Desktop app**, not Web application)
+4. Save the JSON as `config/credentials.json`; AgentTube uses its configured loopback redirect URI exactly
 
 #### OpenAI
 
