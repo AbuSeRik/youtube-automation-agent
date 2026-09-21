@@ -1779,6 +1779,28 @@ class SystemTest {
       ) {
         throw new Error('The bundled discoverability audit did not provide the public content contract');
       }
+      const configuredPath = process.env.DARKZSEO_PATH;
+      delete process.env.DARKZSEO_PATH;
+      try {
+        if (new DarkzSEOAdapter().scriptPath !== null) {
+          throw new Error('DarkzSEO selected an external Python checkout without explicit configuration');
+        }
+      } finally {
+        if (configuredPath === undefined) delete process.env.DARKZSEO_PATH;
+        else process.env.DARKZSEO_PATH = configuredPath;
+      }
+      const brokenExternal = new DarkzSEOAdapter({ scriptPath: 'broken-darkzseo.py' });
+      brokenExternal.auditExternal = async () => {
+        const error = new Error('No module named darkzseo');
+        error.code = 'DARKZSEO_FAILED';
+        throw error;
+      };
+      const fallbackReport = await brokenExternal.audit({
+        id: 'external-fallback', platform: 'youtube', title: 'Fallback audit'
+      });
+      if (fallbackReport.engine.version !== '1.4.0-bundled' || fallbackReport.status === 'unavailable') {
+        throw new Error('A broken external DarkzSEO runtime did not fall back to the bundled audit');
+      }
       await db.saveProductionData({
         id: productionId, status: 'needs_review', assets: {}, timeline: {},
         scheduledPublishTime: null, priority: 50, estimatedDuration: '1:00'

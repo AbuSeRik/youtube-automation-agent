@@ -1,5 +1,4 @@
 const { spawn } = require('child_process');
-const fs = require('fs');
 const path = require('path');
 
 const AUTHORITY_DOMAINS = [
@@ -152,8 +151,7 @@ class DarkzSEOAdapter {
 
   resolveScriptPath() {
     if (process.env.DARKZSEO_PATH) return path.resolve(process.env.DARKZSEO_PATH);
-    const siblingCheckout = path.resolve(__dirname, '..', '..', '..', 'darkzseo', 'darkzseo.py');
-    return fs.existsSync(siblingCheckout) ? siblingCheckout : null;
+    return null;
   }
 
   command() {
@@ -179,7 +177,11 @@ class DarkzSEOAdapter {
   async audit(contentPackage) {
     const command = this.command();
     if (!command) return auditContent(contentPackage);
-    return this.auditExternal(command, contentPackage);
+    try {
+      return await this.auditExternal(command, contentPackage);
+    } catch (_error) {
+      return auditContent(contentPackage);
+    }
   }
 
   async auditExternal(command, contentPackage) {

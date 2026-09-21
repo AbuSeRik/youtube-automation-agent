@@ -25,7 +25,7 @@ Research topics → write scripts → generate narration and visuals → assembl
 - **Outcome & ROI Studio:** align the operator with a measurable KPI, target window, budget, and available revenue/cost evidence without converting missing economics into false zeroes.
 - **Platform-ready foundation:** audits already retain their target platform, providing the durable contract for planned TikTok and Instagram/Reels publishing and analytics adapters.
 
-The content preflight works out of the box. Set `DARKZSEO_PATH` only when developing against a separate DarkzSEO 1.4+ checkout.
+The content preflight works out of the box. Set `DARKZSEO_PATH` only when developing against a separate DarkzSEO 1.4+ checkout. If that optional external runtime is missing or broken, AgentTube automatically uses the bundled audit.
 
 See the complete release history in [CHANGELOG.md](CHANGELOG.md).
 
