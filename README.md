@@ -14,6 +14,20 @@ Research topics → write scripts → generate narration and visuals → assembl
 
 - **v2.10.0 is now on master:** DarkzSEO discoverability audits, controlled growth experiments, and outcome-aware channel operation are available together in the approval-first workflow.
 
+### September 21, 2026 reliability hotfixes
+
+The latest production fixes are included in [`124a1ed`](https://github.com/darkzOGx/youtube-automation-agent/commit/124a1ed18e474878d5829812dd632e579adbd860) and [`d52b40d`](https://github.com/darkzOGx/youtube-automation-agent/commit/d52b40d94a007caf5e7f256378c0265ddcf09d2b):
+
+- **DarkzSEO works without Python:** the bundled advisory audit is now the default. AgentTube no longer auto-selects sibling Python checkouts, and a missing or broken explicitly configured external runtime falls back to the bundled audit instead of reporting `No module named darkzseo`.
+- **Narration repairs keep correct timing:** regenerated narration updates the scene duration from the replacement audio, preventing stale timing and long silent gaps after a rebuild.
+- **Cleaner spoken narration:** internal CTA metadata and bracketed placeholders are excluded from speech, including placeholders that appear in the middle of a line.
+- **Configured visual styles are respected:** scene generation and repair prompts no longer force the `ethereal` style when the channel uses another visual direction.
+- **Complete scheduling controls:** Review Studio can reschedule a production, publish it now, or delete its schedule without deleting the generated content. Immediate uploads also use the correct YouTube publishing metadata.
+- **Reliable desktop YouTube authorization:** OAuth uses the exact dynamically selected loopback address and port, while legacy hardcoded callback settings are normalized automatically.
+- **Null-safe content generation:** a missing `strategyContext` no longer crashes content generation while reading its angle or keywords.
+
+These paths are covered by the 46-test system suite. Existing safety gates still block simulated video, missing narration, unresolved factual claims, and unconfirmed media rights from publishing.
+
 ## What's new in v2.10.0
 
 **AgentTube now has a discoverability adapter layer.** v2.10.0 connects the production pipeline to DarkzSEO without merging the projects or weakening human review, then adds the evidence needed to prove what packaging and strategy actually work:
