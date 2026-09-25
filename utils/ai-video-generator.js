@@ -50,6 +50,8 @@ class AIVideoGenerator {
     // External image CLI (e.g. `gptimg25` for GPT Image 2.5 on a ChatGPT subscription).
     // When set it takes priority over the OpenAI/Gemini image APIs.
     this.imageCommand = process.env.IMAGE_COMMAND || null;
+    // External narration CLI (called with --text-file/--out); takes priority over ElevenLabs/OpenAI/Gemini TTS.
+    this.ttsCommand = process.env.TTS_COMMAND || null;
     // STILL_MOTION=kenburns renders documentary videos from stills with a slow zoom
     // instead of falling back to text slides.
     this.stillMotion = String(process.env.STILL_MOTION || '').toLowerCase();
@@ -75,7 +77,11 @@ class AIVideoGenerator {
 
     try {
       let generatedPath;
-      if (this.elevenLabsApiKey && this.elevenLabsVoiceId) {
+      if (this.ttsCommand) {
+        provider = 'command';
+        model = process.env.TTS_COMMAND_MODEL || 'local';
+        generatedPath = await this.generateCommandTTS(text, outputPath);
+      } else if (this.elevenLabsApiKey && this.elevenLabsVoiceId) {
         provider = 'elevenlabs';
         model = this.elevenLabsModel;
         generatedPath = await this.generateElevenLabsTTS(text, outputPath);
@@ -261,26 +267,21 @@ class AIVideoGenerator {
     return imagePath;
   }
 
-  async generateCommandImage(prompt, imagePath) {
-    // The prompt goes through a file so no prompt text ever reaches the shell. It lives
-    // under the engine root and the command runs from there: gptimg25 only reads prompt
-    // files inside its working directory.
+  // Runs an external generator CLI with a UTF-8 input file (so no prompt/script text ever
+  // reaches the shell) and returns once `outputPath` exists. The input file lives under the
+  // engine root and the command runs from there: gptimg25 only reads files inside its cwd.
+  async runCommandTool({ command, label, input, inputFlag, args = [], outputPath, timeoutMs }) {
     const engineRoot = path.join(__dirname, '..');
     await fs.mkdir(path.join(engineRoot, 'data', 'tmp'), { recursive: true });
-    const promptDir = await fs.mkdtemp(path.join(engineRoot, 'data', 'tmp', 'image-prompt-'));
-    const promptFile = path.join(promptDir, 'prompt.txt');
-    await fs.writeFile(promptFile, prompt, 'utf8');
-    const args = [
-      '--prompt-file', promptFile,
-      '--aspect', process.env.IMAGE_COMMAND_ASPECT || 'landscape',
-      '--quality', process.env.IMAGE_COMMAND_QUALITY || 'high',
-      '--out', imagePath
-    ];
+    const inputDir = await fs.mkdtemp(path.join(engineRoot, 'data', 'tmp', `${label}-`));
+    const inputFile = path.join(inputDir, 'input.txt');
+    await fs.writeFile(inputFile, input, 'utf8');
     // shell is required for .cmd wrappers on Windows; every argument is a flag or a
     // path we created, quoted for paths with spaces.
-    const commandLine = [this.imageCommand, ...args.map(arg => `"${arg}"`)].join(' ');
+    const quoted = [inputFlag, inputFile, ...args, '--out', outputPath].map(arg => `"${arg}"`);
+    const commandLine = [command, ...quoted].join(' ');
     // Other providers overwrite; CLIs like gptimg25 refuse to, so clear any stale file first.
-    await fs.rm(imagePath, { force: true });
+    await fs.rm(outputPath, { force: true });
     try {
       await new Promise((resolve, reject) => {
         const child = spawn(commandLine, { shell: true, windowsHide: true, cwd: engineRoot });
@@ -288,19 +289,36 @@ class AIVideoGenerator {
         // gptimg25 reports errors as JSON on stdout, so keep both streams.
         child.stdout.on('data', chunk => { output += chunk; });
         child.stderr.on('data', chunk => { output += chunk; });
-        const timer = setTimeout(() => child.kill(), Number(process.env.IMAGE_COMMAND_TIMEOUT_MS || 300000));
+        const timer = setTimeout(() => child.kill(), timeoutMs);
         child.on('error', reject);
         child.on('close', code => {
           clearTimeout(timer);
           if (code === 0) resolve();
-          else reject(new Error(`Image command exited with code ${code}: ${output.trim().slice(-500)}`));
+          else reject(new Error(`${label} command exited with code ${code}: ${output.trim().slice(-500)}`));
         });
       });
-      await fs.access(imagePath);
+      await fs.access(outputPath);
     } finally {
-      await fs.rm(promptDir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(inputDir, { recursive: true, force: true }).catch(() => {});
     }
-    return imagePath;
+    return outputPath;
+  }
+
+  async generateCommandImage(prompt, imagePath) {
+    return this.runCommandTool({
+      command: this.imageCommand, label: 'image', input: prompt, inputFlag: '--prompt-file',
+      args: ['--aspect', process.env.IMAGE_COMMAND_ASPECT || 'landscape', '--quality', process.env.IMAGE_COMMAND_QUALITY || 'high'],
+      outputPath: imagePath, timeoutMs: Number(process.env.IMAGE_COMMAND_TIMEOUT_MS || 300000)
+    });
+  }
+
+  async generateCommandTTS(text, outputPath) {
+    // Local narration (e.g. tools/tts/narrate.py → Qwen3-TTS voice clone + Whisper QA); slow, so a long default timeout.
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    return this.runCommandTool({
+      command: this.ttsCommand, label: 'tts', input: text, inputFlag: '--text-file',
+      outputPath, timeoutMs: Number(process.env.TTS_COMMAND_TIMEOUT_MS || 3 * 60 * 60 * 1000)
+    });
   }
 
   async generateGeminiImage(prompt, imagePath) {

@@ -2639,7 +2639,7 @@ class SystemTest {
     const os = require('os');
     const sharp = require('sharp');
     const { getMediaDuration } = require('./utils/ffmpeg');
-    const envKeys = ['IMAGE_COMMAND', 'STILL_MOTION', 'OPENAI_API_KEY', 'GEMINI_API_KEY'];
+    const envKeys = ['IMAGE_COMMAND', 'STILL_MOTION', 'TTS_COMMAND', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'ELEVENLABS_API_KEY'];
     const savedEnv = {};
     for (const key of envKeys) { savedEnv[key] = process.env[key]; delete process.env[key]; }
     // A path with a space mirrors real project folders like "YouTube Faceless".
@@ -2678,6 +2678,24 @@ class SystemTest {
       await generator.renderMediaTimeline(stills.map(p => ({ type: 'image', path: p, duration: 1 })), video);
       const seconds = await getMediaDuration(video);
       if (!(seconds > 1.8 && seconds < 2.3)) throw new Error(`Ken Burns video has wrong duration: ${seconds}`);
+
+      // TTS_COMMAND: fake narrator with the narrate.py flags — writes 1 s of tone and echoes the text.
+      const { getFFmpegPath } = require('./utils/ffmpeg');
+      const fakeTTS = path.join(directory, 'fake-tts-cli.js');
+      await fs.writeFile(fakeTTS, `
+        const fs = require('fs'); const { execFileSync } = require('child_process');
+        const a = process.argv.slice(2); const get = f => a[a.indexOf(f) + 1];
+        fs.writeFileSync(get('--out') + '.txt', fs.readFileSync(get('--text-file'), 'utf8'));
+        execFileSync(${JSON.stringify(getFFmpegPath())}, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=220:duration=1', get('--out')]);
+      `);
+      process.env.TTS_COMMAND = `node "${fakeTTS}"`;
+      const narrator = new AIVideoGenerator({});
+      const script = 'Ah... this is the Salton Sea — "the Riviera" & more.\n\nSecond paragraph.';
+      const narration = path.join(directory, 'narration.mp3');
+      await narrator.generateTTSAudio(script, narration);
+      if (narrator.lastNarrationResult?.provider !== 'command') throw new Error('TTS_COMMAND was not used for narration');
+      if (await fs.readFile(narration + '.txt', 'utf8') !== script) throw new Error('Narration text did not reach the TTS command intact');
+      if (!(await getMediaDuration(narration) > 0.5)) throw new Error('TTS command output is not usable audio');
     } finally {
       for (const key of envKeys) {
         if (savedEnv[key] === undefined) delete process.env[key]; else process.env[key] = savedEnv[key];
