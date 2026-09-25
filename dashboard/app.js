@@ -788,6 +788,7 @@ function switchView(view) {
     overview: ['OPERATOR OVERVIEW', 'Know what happens next.'],
     operator: ['AUTONOMOUS OPERATOR', 'Give Lumen the strategy.'],
     pipeline: ['CONTENT OPERATIONS', 'From idea to published.'],
+    studio: ['STUDIO', 'Script to finished video.'],
     calendar: ['EDITORIAL PLANNING', 'Plan before you generate.'],
     analytics: ['PERFORMANCE', 'Turn results into the next move.'],
     engagement: ['AUDIENCE ENGAGEMENT', 'Talk with the people watching.'],
@@ -797,6 +798,7 @@ function switchView(view) {
   $('#view-eyebrow').textContent = titles[view][0];
   $('#view-title').textContent = titles[view][1];
   location.hash = view;
+  if (view === 'studio') loadStudio();
 }
 
 function selectOptions(options, selected) {
@@ -1032,7 +1034,7 @@ async function openContent(productionId) {
             <label class="toggle"><input name="rightsConfirmed" type="checkbox" ${data.rightsConfirmed ? 'checked' : ''}><span></span> Media rights confirmed</label>
           </div>
           ${item.schedule && !['published', 'uploading', 'uploaded', 'reconciliation_required'].includes(item.schedule.status) ? `<div class="form-actions"><button type="button" class="button secondary" data-reschedule-content="${escapeHTML(item.id)}">Reschedule</button><button type="button" class="button primary" data-publish-now-content="${escapeHTML(item.id)}">Publish now</button><button type="button" class="button danger" data-delete-schedule="${escapeHTML(item.id)}">Delete schedule</button></div>` : ''}
-          ${canReview ? `<div class="form-actions"><button type="button" class="button primary" data-approve-content="${escapeHTML(item.id)}">Approve & schedule</button><button type="button" class="button secondary" data-save-content="${escapeHTML(item.id)}">Save draft</button><button type="button" class="button danger" data-reject-content="${escapeHTML(item.id)}">Reject</button><button type="button" class="button ghost" data-retry-content="${escapeHTML(item.id)}">Regenerate</button></div>` : `<a class="button secondary" href="${escapeHTML(item.schedule?.youtube_url || '#')}" target="_blank" rel="noopener">Open on YouTube</a>`}
+          ${canReview ? `<div class="form-actions"><button type="button" class="button primary" data-approve-content="${escapeHTML(item.id)}">Approve & schedule</button><button type="button" class="button secondary" data-save-content="${escapeHTML(item.id)}">Save draft</button><button type="button" class="button danger" data-reject-content="${escapeHTML(item.id)}">Reject</button><button type="button" class="button secondary" data-retry-content="${escapeHTML(item.id)}">Regenerate</button></div>` : `<a class="button secondary" href="${escapeHTML(item.schedule?.youtube_url || '#')}" target="_blank" rel="noopener">Open on YouTube</a>`}
       </form>`;
     $('#content-review-form').dataset.productionId = item.id;
     $('#content-dialog').showModal();
@@ -1749,3 +1751,61 @@ const initialView = location.hash.slice(1);
 if (['overview', 'operator', 'pipeline', 'calendar', 'analytics', 'engagement', 'readiness', 'settings'].includes(initialView)) switchView(initialView);
 refreshDashboard();
 setInterval(() => refreshDashboard(true), 8000);
+
+// ---- Studio: project pipeline (tools/pipeline.py via /api/studio) ----
+const STUDIO_STATE = { done: 'completed', running: 'running', ready: 'steady', blocked: 'queued' };
+const STUDIO_LABEL = { done: 'Done', running: 'Running', ready: 'Ready', blocked: 'Waiting' };
+let studioTimer = null;
+
+async function loadStudio() {
+  clearTimeout(studioTimer);
+  if (ui.currentView !== 'studio') return;
+  try {
+    const { videos } = await api('/api/studio');
+    const logs = await Promise.all(videos.map(v => api(`/api/studio/${v.slug}/log`).catch(() => ({ text: '' }))));
+    $('#studio-list').innerHTML = videos.map((v, i) => renderStudioVideo(v, logs[i])).join('');
+    const busy = videos.some(v => v.steps.some(s => s.state === 'running'));
+    studioTimer = setTimeout(loadStudio, busy ? 4000 : 15000);
+  } catch (error) {
+    $('#studio-list').innerHTML = `<p class="empty">${escapeHTML(error.message)}</p>`;
+  }
+}
+
+function renderStudioVideo(video, log) {
+  const running = video.steps.some(s => s.state === 'running');
+  const allDone = video.steps.every(s => s.state === 'done');
+  const steps = video.steps.map(s => `
+    <li class="studio-step">
+      <span class="status ${STUDIO_STATE[s.state]}">${STUDIO_LABEL[s.state]}</span>
+      <strong>${escapeHTML(s.label)}</strong>
+      ${s.missing.length ? `<small><span>Needs:</span> <span data-no-i18n>${escapeHTML(s.missing.join(', '))}</span></small>` : ''}
+      ${s.state === 'ready' && !running ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="${s.step}">Run</button>` : ''}
+    </li>`).join('');
+  return `<article class="panel studio-video">
+    <header class="studio-head"><h3 data-no-i18n>${escapeHTML(video.slug)}</h3>
+      ${video.youtube ? `<a class="button secondary" href="${escapeHTML(video.youtube.url)}" target="_blank" rel="noopener">On YouTube</a>` : ''}
+      ${allDone && video.publish_kit && !video.youtube ? `<button class="button primary" data-studio-submit="${video.slug}">Send to review</button>` : ''}
+      ${!allDone && !running ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="all">Run all ready steps</button>` : ''}
+    </header>
+    <ul class="studio-steps">${steps}</ul>
+    ${log.text ? `<pre class="studio-log" data-no-i18n>${escapeHTML(log.step)}:\n${escapeHTML(log.text)}</pre>` : ''}
+  </article>`;
+}
+
+document.addEventListener('click', async event => {
+  const run = event.target.closest('[data-studio-run]');
+  const submit = event.target.closest('[data-studio-submit]');
+  if (!run && !submit) return;
+  try {
+    if (run) {
+      await api(`/api/studio/${run.dataset.studioRun}/${run.dataset.step}/run`, { method: 'POST' });
+      showToast('Step started');
+    } else {
+      const result = await api(`/api/studio/${submit.dataset.studioSubmit}/submit`, { method: 'POST' });
+      showToast(result.reviewStatus === 'needs_review' ? 'Sent to review queue' : 'Sent, but quality checks need attention', result.reviewStatus === 'needs_review' ? 'success' : 'error');
+    }
+    setTimeout(loadStudio, 1500);
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+});

@@ -66,7 +66,8 @@ class SystemTest {
       { name: 'Reply Approval and Posting', test: () => this.testReplyApprovalAndPosting() },
       { name: 'Engagement AI Provider Wiring', test: () => this.testEngagementAIProviderWiring() },
       { name: 'Engagement Sync Schedule', test: () => this.testEngagementSyncSchedule() },
-      { name: 'Growth Experiment Refresh Schedule', test: () => this.testGrowthExperimentRefreshSchedule() }
+      { name: 'Growth Experiment Refresh Schedule', test: () => this.testGrowthExperimentRefreshSchedule() },
+      { name: 'Studio Publish Kit Parsing', test: () => this.testStudioPublishKit() }
     ];
 
     let passed = 0;
@@ -326,9 +327,11 @@ class SystemTest {
       ) {
         throw new Error('Operator dashboard API did not return its data contract');
       }
+      // A local .env may set API_KEY; send it so these checks exercise the route, not the auth gate.
+      const jsonHeaders = { 'Content-Type': 'application/json', ...(process.env.API_KEY ? { 'x-api-key': process.env.API_KEY } : {}) };
       const unavailableStart = await fetch(`http://127.0.0.1:${port}/api/operator/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: jsonHeaders,
         body: '{}'
       });
       if (unavailableStart.status !== 503) {
@@ -346,7 +349,7 @@ class SystemTest {
       });
       const approveLearning = await fetch(
         `http://127.0.0.1:${port}/api/learning/recommendations/${learningRecommendation.id}/approve`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+        { method: 'POST', headers: jsonHeaders, body: '{}' }
       );
       const approvedLearning = await approveLearning.json();
       if (!approveLearning.ok || approvedLearning.result?.status !== 'approved') {
@@ -3552,6 +3555,20 @@ class SystemTest {
     }
     const noService = new DailyAutomation({}, fakeDb, { generateContent: async () => {} });
     await noService.collectAudienceEngagement(); // must be a silent no-op, not a crash
+  }
+
+  async testStudioPublishKit() {
+    const { parsePublishKit, buildProduction } = require('./utils/local-pipeline');
+    const kit = parsePublishKit('# x\n\n## Title\nA Title\n\n## Description\nLine 1\n\n0:00 Intro\n\n## Tags\na, b ,c\n\n## Thumbnail\n`t.jpg`\n');
+    if (kit.title !== 'A Title' || kit.description !== 'Line 1\n\n0:00 Intro' || kit.tags.join('|') !== 'a|b|c') {
+      throw new Error(`publish kit parsed wrong: ${JSON.stringify(kit)}`);
+    }
+    let rejected = false;
+    try { parsePublishKit('## Tags\na'); } catch { rejected = true; }
+    if (!rejected) throw new Error('kit without title/description must be rejected');
+    try { buildProduction('../etc'); throw new Error('path traversal slug accepted'); } catch (error) {
+      if (error.status !== 404) throw error;
+    }
   }
 
   async testGrowthExperimentRefreshSchedule() {

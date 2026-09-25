@@ -28,6 +28,7 @@ const { GrowthExperimentService } = require('./utils/growth-experiment-service')
 const { AITextService } = require('./utils/ai-text-service');
 const { DiscoverabilityService } = require('./utils/discoverability-service');
 const { UITranslationService } = require('./utils/ui-translation-service');
+const localPipeline = require('./utils/local-pipeline');
 const { version } = require('./package.json');
 const chalk = require('chalk');
 
@@ -578,6 +579,39 @@ class YouTubeAutomationAgent {
         return res.json({ success: true, result });
       } catch (error) {
         return res.status(error.status || 500).json({ success: false, error: error.message });
+      }
+    });
+
+    // Studio: the project's own pipeline (tools/pipeline.py) — see docs/specs/panel-local-pipeline.md
+    this.app.get('/api/studio', async (_req, res) => {
+      try {
+        return res.json({ videos: await localPipeline.status() });
+      } catch (error) {
+        return res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/studio/:slug/log', (req, res) => {
+      try {
+        return res.json(localPipeline.log(req.params.slug));
+      } catch (error) {
+        return res.status(error.status || 500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/studio/:slug/:step/run', protect, (req, res) => {
+      try {
+        return res.status(202).json(localPipeline.run(req.params.slug, req.params.step));
+      } catch (error) {
+        return res.status(error.status || 500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/studio/:slug/submit', protect, async (req, res) => {
+      try {
+        return res.json(await this.submitStudioVideo(req.params.slug));
+      } catch (error) {
+        return res.status(error.status || 500).json({ error: error.message });
       }
     });
 
@@ -1737,6 +1771,27 @@ class YouTubeAutomationAgent {
       reviewNotes: reviewNotes || (quality.passed ? null : `Blocking checks failed: ${quality.blockingFailures.join(', ')}`),
       reviewedAt: null
     });
+  }
+
+  // Finished Studio video → review queue (needs_review). Publishing still requires "Approve".
+  async submitStudioVideo(slug) {
+    const productionData = localPipeline.buildProduction(slug);
+    const existing = (await this.db.getProductionPipeline()).find(p => p.timeline?.slug === slug && p.status !== 'rejected');
+    if (existing) throw Object.assign(new Error(`Already in the queue: ${existing.id} (${existing.status})`), { status: 409 });
+    const contentId = await this.db.saveProductionData(productionData);
+    await this.db.saveProductionSnapshot(productionData);
+    if (!this.provenance) this.provenance = new ProvenanceService(this.db);
+    await this.provenance.initialize(contentId, productionData);
+    const quality = await this.operator.runQualityChecks(productionData, await this.db.getChannelProfile() || {});
+    const reviewStatus = quality.passed ? 'needs_review' : 'needs_attention';
+    await this.db.saveContentReview(contentId, {
+      status: reviewStatus,
+      qualityChecks: quality.checks,
+      editorData: { privacyStatus: 'private' },
+      reviewNotes: quality.passed ? null : `Blocking checks failed: ${quality.blockingFailures.join(', ')}`
+    });
+    await this.db.updateProductionStatus(contentId, reviewStatus);
+    return { contentId, reviewStatus, title: productionData.seo.title };
   }
 
   async approveContent(productionId, input) {

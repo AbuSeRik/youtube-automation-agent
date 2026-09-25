@@ -31,7 +31,8 @@ class DailyAutomation {
     // Daily content generation at 6:00 AM
     this.scheduledTasks.set('daily-content-generation', 
       cron.schedule('0 6 * * *', async () => {
-        if (this.isEnabled) {
+        // Off unless explicitly enabled: this path schedules uploads without the review gate.
+        if (this.isEnabled && process.env.ENGINE_DAILY_GENERATION === 'on') {
           await this.runDailyContentGeneration();
         }
       }, { scheduled: false })

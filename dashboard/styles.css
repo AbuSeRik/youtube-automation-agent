@@ -1042,3 +1042,13 @@ body.scrolled .topbar { border-color: rgba(151, 167, 195, .32); }
 .comment-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 8px; margin-bottom: 12px; }
 .comment-original { opacity: 0.8; font-size: 0.9rem; white-space: pre-wrap; margin: 0; }
 .comment-card textarea { width: 100%; min-height: 72px; resize: vertical; }
+
+/* Studio */
+.studio-list { display: grid; gap: 16px; }
+.studio-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.studio-head h3 { margin: 0 auto 0 0; }
+.studio-steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.studio-step { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.studio-step small { opacity: .7; }
+.studio-step .button { margin-left: auto; }
+.studio-log { margin-top: 12px; max-height: 220px; overflow: auto; font-size: 12px; white-space: pre-wrap; opacity: .85; }

@@ -243,7 +243,15 @@ class PublishingSchedulingAgent {
     scheduleEntry.youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
     scheduleEntry.error = null;
     await this.db.updateScheduleEntry(scheduleEntry);
-    
+
+    // Studio videos (production/<slug>/edit/draft.mp4): mark the source as published so it is never re-submitted.
+    const videoPath = metadata.video.path;
+    if (path.basename(videoPath) === 'draft.mp4' && path.basename(path.dirname(videoPath)) === 'edit') {
+      const marker = path.join(path.dirname(path.dirname(videoPath)), 'publish', 'youtube.json');
+      await fs.mkdir(path.dirname(marker), { recursive: true });
+      await fs.writeFile(marker, JSON.stringify({ id: videoId, url: `https://youtu.be/${videoId}`, published: new Date().toISOString() }, null, 2));
+    }
+
     // Upload thumbnail
     if (metadata.thumbnail && metadata.thumbnail.path) {
       await this.uploadThumbnail(videoId, metadata.thumbnail.path);
