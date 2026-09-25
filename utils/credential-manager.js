@@ -529,7 +529,9 @@ class CredentialManager {
       missing.push('youtube');
     }
 
-    if (!this.hasAITextProvider()) {
+    // STUDIO_ONLY: videos come from the Studio pipeline (text by Claude), so the engine's own
+    // generator — the only user of the AI text provider — may stay unconfigured.
+    if (!this.hasAITextProvider() && process.env.STUDIO_ONLY !== 'true') {
       missing.push('an AI provider (OpenAI, Gemini, OpenRouter, Kimi, MiMo, or GLM)');
     }
 
