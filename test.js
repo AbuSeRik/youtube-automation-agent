@@ -46,6 +46,7 @@ class SystemTest {
       { name: 'Placeholder Scheduling Guard', test: () => this.testPlaceholderSchedulingGuard() },
       { name: 'FFmpeg Resolution', test: () => this.testFFmpegResolution() },
       { name: 'Gemini Media Provider Selection', test: () => this.testGeminiMediaProvider() },
+      { name: 'Image Command and Ken Burns Stills', test: () => this.testImageCommandAndKenBurns() },
       { name: 'Slideshow Renderer', test: () => this.testSlideshowRenderer() },
       { name: 'Evergreen Template Topics', test: () => this.testEvergreenTopics() },
       { name: 'Walkthrough Module', test: () => this.testWalkthroughModule() },
@@ -2630,6 +2631,59 @@ class SystemTest {
     }
 
     this.logger.info('Gemini media provider selection test completed successfully');
+  }
+
+  async testImageCommandAndKenBurns() {
+    const fs = require('fs').promises;
+    const os = require('os');
+    const sharp = require('sharp');
+    const { getMediaDuration } = require('./utils/ffmpeg');
+    const envKeys = ['IMAGE_COMMAND', 'STILL_MOTION', 'OPENAI_API_KEY', 'GEMINI_API_KEY'];
+    const savedEnv = {};
+    for (const key of envKeys) { savedEnv[key] = process.env[key]; delete process.env[key]; }
+    // A path with a space mirrors real project folders like "YouTube Faceless".
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa image cmd-'));
+
+    try {
+      // Fake image CLI with the same flags as gptimg25: writes a PNG and echoes the prompt it received.
+      const fakeCli = path.join(directory, 'fake-image-cli.js');
+      await fs.writeFile(fakeCli, `
+        const fs = require('fs'); const sharp = require(${JSON.stringify(require.resolve('sharp'))});
+        const a = process.argv.slice(2); const get = f => a[a.indexOf(f) + 1];
+        fs.writeFileSync(get('--out') + '.prompt', fs.readFileSync(get('--prompt-file'), 'utf8'));
+        sharp({ create: { width: 640, height: 360, channels: 3, background: '#aa5500' } }).png().toFile(get('--out'));
+      `);
+      process.env.IMAGE_COMMAND = `node "${fakeCli}"`;
+      process.env.STILL_MOTION = 'kenburns';
+      const { AIVideoGenerator } = require('./utils/ai-video-generator');
+      const generator = new AIVideoGenerator({});
+      if (generator.imageCommand !== process.env.IMAGE_COMMAND) throw new Error('IMAGE_COMMAND was not picked up');
+
+      const prompt = 'Abandoned 1960s resort pool at dusk, "quoted" & special chars';
+      const stills = [];
+      for (const name of ['a.png', 'b.png']) {
+        const out = path.join(directory, name);
+        await generator.generateImage(prompt, out);
+        const meta = await sharp(out).metadata();
+        if (meta.width !== 640) throw new Error('Image command output was not written');
+        if (await fs.readFile(out + '.prompt', 'utf8') !== prompt) throw new Error('Prompt did not reach the image command intact');
+        stills.push(out);
+      }
+
+      const filter = generator.kenBurnsFilter(1, 2);
+      if (!filter.includes('zoompan') || !filter.includes('1.12-0.12*on/60')) throw new Error('Ken Burns filter missing zoompan / alternating direction');
+
+      const video = path.join(directory, 'kenburns.mp4');
+      await generator.renderMediaTimeline(stills.map(p => ({ type: 'image', path: p, duration: 1 })), video);
+      const seconds = await getMediaDuration(video);
+      if (!(seconds > 1.8 && seconds < 2.3)) throw new Error(`Ken Burns video has wrong duration: ${seconds}`);
+    } finally {
+      for (const key of envKeys) {
+        if (savedEnv[key] === undefined) delete process.env[key]; else process.env[key] = savedEnv[key];
+      }
+      await fs.rm(directory, { recursive: true, force: true }).catch(() => {});
+    }
+    this.logger.info('Image command + Ken Burns test completed successfully');
   }
 
   async testSlideshowRenderer() {

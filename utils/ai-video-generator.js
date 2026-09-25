@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
 const sharp = require('sharp');
+const { spawn } = require('child_process');
 const { Logger } = require('./logger');
 const { runFFmpeg, checkFFmpeg, ffmpegInstallHint } = require('./ffmpeg');
 const { MediaGenerationService } = require('./media-generation-service');
@@ -45,7 +46,14 @@ class AIVideoGenerator {
         this.logger.warn('Failed to initialize Gemini media service:', error.message);
       }
     }
-    
+
+    // External image CLI (e.g. `gptimg25` for GPT Image 2.5 on a ChatGPT subscription).
+    // When set it takes priority over the OpenAI/Gemini image APIs.
+    this.imageCommand = process.env.IMAGE_COMMAND || null;
+    // STILL_MOTION=kenburns renders documentary videos from stills with a slow zoom
+    // instead of falling back to text slides.
+    this.stillMotion = String(process.env.STILL_MOTION || '').toLowerCase();
+
     // ElevenLabs configuration
     this.elevenLabsApiKey = resolvedCredentials.elevenLabs?.apiKey || process.env.ELEVENLABS_API_KEY;
     this.elevenLabsVoiceId = resolvedCredentials.elevenLabs?.voiceId || process.env.ELEVENLABS_VOICE_ID;
@@ -195,7 +203,7 @@ class AIVideoGenerator {
     this.logger.info(`Generating ${count} visual assets with style: ${style}`);
 
     try {
-      if (!this.openai && !this.gemini) {
+      if (!this.imageCommand && !this.openai && !this.gemini) {
         return await this.simulateVisualAssets(prompt, style, count);
       }
 
@@ -218,6 +226,10 @@ class AIVideoGenerator {
 
   async generateImage(prompt, imagePath) {
     await fs.mkdir(path.dirname(imagePath), { recursive: true });
+
+    if (this.imageCommand) {
+      return await this.generateCommandImage(prompt, imagePath);
+    }
 
     if (this.openai) {
       return await this.generateOpenAIImage(prompt, imagePath);
@@ -246,6 +258,48 @@ class AIVideoGenerator {
       await this.downloadImage(response.data[0].url, imagePath);
     }
 
+    return imagePath;
+  }
+
+  async generateCommandImage(prompt, imagePath) {
+    // The prompt goes through a file so no prompt text ever reaches the shell. It lives
+    // under the engine root and the command runs from there: gptimg25 only reads prompt
+    // files inside its working directory.
+    const engineRoot = path.join(__dirname, '..');
+    await fs.mkdir(path.join(engineRoot, 'data', 'tmp'), { recursive: true });
+    const promptDir = await fs.mkdtemp(path.join(engineRoot, 'data', 'tmp', 'image-prompt-'));
+    const promptFile = path.join(promptDir, 'prompt.txt');
+    await fs.writeFile(promptFile, prompt, 'utf8');
+    const args = [
+      '--prompt-file', promptFile,
+      '--aspect', process.env.IMAGE_COMMAND_ASPECT || 'landscape',
+      '--quality', process.env.IMAGE_COMMAND_QUALITY || 'high',
+      '--out', imagePath
+    ];
+    // shell is required for .cmd wrappers on Windows; every argument is a flag or a
+    // path we created, quoted for paths with spaces.
+    const commandLine = [this.imageCommand, ...args.map(arg => `"${arg}"`)].join(' ');
+    // Other providers overwrite; CLIs like gptimg25 refuse to, so clear any stale file first.
+    await fs.rm(imagePath, { force: true });
+    try {
+      await new Promise((resolve, reject) => {
+        const child = spawn(commandLine, { shell: true, windowsHide: true, cwd: engineRoot });
+        let output = '';
+        // gptimg25 reports errors as JSON on stdout, so keep both streams.
+        child.stdout.on('data', chunk => { output += chunk; });
+        child.stderr.on('data', chunk => { output += chunk; });
+        const timer = setTimeout(() => child.kill(), Number(process.env.IMAGE_COMMAND_TIMEOUT_MS || 300000));
+        child.on('error', reject);
+        child.on('close', code => {
+          clearTimeout(timer);
+          if (code === 0) resolve();
+          else reject(new Error(`Image command exited with code ${code}: ${output.trim().slice(-500)}`));
+        });
+      });
+      await fs.access(imagePath);
+    } finally {
+      await fs.rm(promptDir, { recursive: true, force: true }).catch(() => {});
+    }
     return imagePath;
   }
 
@@ -358,6 +412,15 @@ class AIVideoGenerator {
         }
       }
 
+      if (this.stillMotion === 'kenburns' && (await this.filterLocalImageAssets(visualAssets)).length) {
+        const produced = await this.generateHybridVideo(
+          [], visualAssets, audioPath, outputPath,
+          options.estimatedDuration || this.calculateScriptDuration(script)
+        );
+        this.lastVideoResult = { requestedProvider: 'kenburns', actualProvider: 'kenburns', model: 'local-ffmpeg', mode: 'kenburns', generatedSeconds: 0, tasks: [], scenes: [] };
+        return produced;
+      }
+
       const produced = await this.generateSlideshowVideo(script, visualAssets, audioPath, outputPath);
       this.lastVideoResult = { requestedProvider: 'slideshow', actualProvider: 'slideshow', model: 'local-ffmpeg', mode: 'slideshow', generatedSeconds: 0, tasks: [], scenes: [] };
       return produced;
@@ -413,12 +476,25 @@ class AIVideoGenerator {
       else args.push('-stream_loop', '-1', '-i', segment.path);
     }
     const filters = segments.map((segment, index) =>
-      `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,trim=duration=${Number(segment.duration).toFixed(2)},setpts=PTS-STARTPTS[v${index}]`
+      segment.type === 'image' && this.stillMotion === 'kenburns'
+        ? this.kenBurnsFilter(index, segment.duration)
+        : `[${index}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p,trim=duration=${Number(segment.duration).toFixed(2)},setpts=PTS-STARTPTS[v${index}]`
     );
     filters.push(`${segments.map((_, index) => `[v${index}]`).join('')}concat=n=${segments.length}:v=1:a=0[vout]`);
     args.push('-filter_complex', filters.join(';'), '-map', '[vout]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', outputPath);
     await runFFmpeg(args);
     return outputPath;
+  }
+
+  kenBurnsFilter(index, duration) {
+    const seconds = Number(duration).toFixed(2);
+    const frames = Math.max(1, Math.round(Number(duration) * 30));
+    // Slow 12% zoom across the still; alternate in/out so consecutive shots don't feel identical.
+    // Upscale to 4K first so zoompan's integer cropping doesn't jitter.
+    const zoom = index % 2 === 0 ? `1+0.12*on/${frames}` : `1.12-0.12*on/${frames}`;
+    return `[${index}:v]scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,` +
+      `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1920x1080:fps=30,` +
+      `format=yuv420p,trim=duration=${seconds},setpts=PTS-STARTPTS[v${index}]`;
   }
 
   async filterLocalImageAssets(visualAssets = []) {
@@ -887,7 +963,7 @@ class AIVideoGenerator {
     this.logger.info('Generating custom thumbnail...');
 
     try {
-      if (!this.openai && !this.gemini) {
+      if (!this.imageCommand && !this.openai && !this.gemini) {
         return await this.simulateThumbnailGeneration(script, style);
       }
 

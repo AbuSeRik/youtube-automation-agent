@@ -83,6 +83,7 @@ backup/
 # Generated content outputs
 data/assets/
 data/audio/
+data/tmp/
 data/captions/
 data/scripts/
 data/videos/
