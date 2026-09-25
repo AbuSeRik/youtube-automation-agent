@@ -2347,7 +2347,7 @@ class SystemTest {
     const manager = new CredentialManager();
 
     // Isolate the test from any API keys set in the environment
-    const envKeys = [...Object.values(PROVIDERS).map(p => p.envKey), 'GEMINI_API_KEY'];
+    const envKeys = [...Object.values(PROVIDERS).map(p => p.envKey), 'GEMINI_API_KEY', 'STUDIO_ONLY'];
     const savedEnv = {};
     for (const key of envKeys) {
       savedEnv[key] = process.env[key];
