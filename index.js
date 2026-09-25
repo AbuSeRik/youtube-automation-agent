@@ -591,17 +591,17 @@ class YouTubeAutomationAgent {
       }
     });
 
-    this.app.get('/api/studio/:slug/log', (req, res) => {
+    this.app.get('/api/studio/:slug/log', async (req, res) => {
       try {
-        return res.json(localPipeline.log(req.params.slug));
+        return res.json(await localPipeline.log(req.params.slug));
       } catch (error) {
         return res.status(error.status || 500).json({ error: error.message });
       }
     });
 
-    this.app.post('/api/studio/:slug/:step/run', protect, (req, res) => {
+    this.app.post('/api/studio/:slug/:step/run', protect, async (req, res) => {
       try {
-        return res.status(202).json(localPipeline.run(req.params.slug, req.params.step));
+        return res.status(202).json(await localPipeline.run(req.params.slug, req.params.step));
       } catch (error) {
         return res.status(error.status || 500).json({ error: error.message });
       }
@@ -1775,9 +1775,10 @@ class YouTubeAutomationAgent {
 
   // Finished Studio video → review queue (needs_review). Publishing still requires "Approve".
   async submitStudioVideo(slug) {
-    const productionData = localPipeline.buildProduction(slug);
     const existing = (await this.db.getProductionPipeline()).find(p => p.timeline?.slug === slug && p.status !== 'rejected');
     if (existing) throw Object.assign(new Error(`Already in the queue: ${existing.id} (${existing.status})`), { status: 409 });
+    await localPipeline.pullOutputs(slug);
+    const productionData = localPipeline.buildProduction(slug);
     const contentId = await this.db.saveProductionData(productionData);
     await this.db.saveProductionSnapshot(productionData);
     if (!this.provenance) this.provenance = new ProvenanceService(this.db);

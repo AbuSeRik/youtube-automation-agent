@@ -5,12 +5,64 @@ const { execFile, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const PROJECT = path.resolve(__dirname, '..', '..');
+const PROJECT = path.resolve(process.env.STUDIO_PROJECT || path.join(__dirname, '..', '..'));
 const PYTHON = process.env.PIPELINE_PYTHON || 'python';
 const SLUG = /^\d\d-[a-z0-9-]+$/;
 const STEPS = new Set(['text', 'voice', 'archive', 'ai_shots', 'music', 'align', 'render', 'thumbnail', 'all']);
 
-function status() {
+// Server mode (DocInternal): steps run on the GPU worker (tools/worker/worker.py) over Tailscale.
+const WORKER_URL = process.env.WORKER_URL || '';
+const WORKER_TOKEN = process.env.WORKER_TOKEN || '';
+// creative inputs written here (by Claude) → pushed to the worker before a step runs; worker name → local path
+const INPUTS = {
+  'shots.json': slug => path.join(PROJECT, 'production', slug, 'shots.json'),
+  'images/archive-list.txt': slug => path.join(PROJECT, 'production', slug, 'images', 'archive-list.txt'),
+  'edit.json': slug => path.join(PROJECT, 'production', slug, 'edit.json'),
+  'music/caption.txt': slug => path.join(PROJECT, 'production', slug, 'music', 'caption.txt'),
+  'publish/thumbnail.json': slug => path.join(PROJECT, 'production', slug, 'publish', 'thumbnail.json'),
+  'script.md': slug => path.join(PROJECT, 'scripts', `${slug}.md`),
+  'publish.md': slug => path.join(PROJECT, 'publish', `${slug}.md`)
+};
+// finished outputs pulled from the worker before submit (needed by the YouTube upload)
+const OUTPUTS = ['edit/draft.mp4', 'publish/thumbnail.jpg', 'edit/narration.srt', 'voice/narration.mp3', 'voice/narration.txt'];
+
+async function worker(method, route, body) {
+  const response = await fetch(`${WORKER_URL}${route}`, {
+    method,
+    headers: { Authorization: `Bearer ${WORKER_TOKEN}`, ...(body && !Buffer.isBuffer(body) ? { 'Content-Type': 'application/json' } : {}) },
+    body: body && !Buffer.isBuffer(body) ? JSON.stringify(body) : body,
+    signal: AbortSignal.timeout(method === 'GET' && route.startsWith('/file/') ? 600000 : 30000)
+  });
+  if (!response.ok) throw Object.assign(new Error(`worker ${route}: HTTP ${response.status}`), { status: 502 });
+  return response;
+}
+
+async function pushInputs(slug) {
+  for (const [name, local] of Object.entries(INPUTS)) {
+    const file = local(slug);
+    if (fs.existsSync(file)) await worker('PUT', `/file/${slug}/${name}`, fs.readFileSync(file));
+  }
+}
+
+async function pullOutputs(slug) {
+  if (!WORKER_URL) return;
+  for (const name of OUTPUTS) {
+    const target = path.join(PROJECT, 'production', slug, name);
+    const data = Buffer.from(await (await worker('GET', `/file/${slug}/${name}`)).arrayBuffer());
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, data);
+  }
+}
+
+async function status() {
+  if (WORKER_URL) {
+    const videos = await (await worker('GET', '/status')).json();
+    for (const v of videos) {  // uploads happen on the server, so its publish/youtube.json marker wins
+      const marker = path.join(PROJECT, 'production', v.slug, 'publish', 'youtube.json');
+      if (fs.existsSync(marker)) v.youtube = JSON.parse(fs.readFileSync(marker, 'utf8'));
+    }
+    return videos;
+  }
   return new Promise((resolve, reject) => {
     execFile(PYTHON, ['tools/pipeline.py', 'status', '--json'], { cwd: PROJECT, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, maxBuffer: 4 << 20 },
       (error, stdout) => (error ? reject(error) : resolve(JSON.parse(stdout))));
@@ -26,12 +78,16 @@ function assertSlug(slug) {
 }
 
 // Fire-and-forget: pipeline.py journals the run and holds the single-GPU lock itself.
-function run(slug, step) {
+async function run(slug, step) {
   assertSlug(slug);
   if (!STEPS.has(step)) {
     const error = new Error(`Unknown step: ${step}`);
     error.status = 400;
     throw error;
+  }
+  if (WORKER_URL) {
+    await pushInputs(slug);
+    return (await worker('POST', '/run', { slug, step })).json();
   }
   const child = spawn(PYTHON, ['tools/pipeline.py', 'run', slug, step], {
     cwd: PROJECT, env: { ...process.env, PYTHONIOENCODING: 'utf-8' }, detached: true, stdio: 'ignore', windowsHide: true
@@ -40,8 +96,9 @@ function run(slug, step) {
   return { started: true, slug, step };
 }
 
-function log(slug, lines = 40) {
+async function log(slug, lines = 40) {
   assertSlug(slug);
+  if (WORKER_URL) return (await worker('GET', `/log/${slug}`)).json();
   const dir = path.join(PROJECT, 'production', slug, 'logs');
   if (!fs.existsSync(dir)) return { step: null, text: '' };
   const latest = fs.readdirSync(dir).filter(f => f.endsWith('.log'))
@@ -101,4 +158,4 @@ function buildProduction(slug) {
   };
 }
 
-module.exports = { status, run, log, parsePublishKit, buildProduction, PROJECT };
+module.exports = { status, run, log, pullOutputs, parsePublishKit, buildProduction, PROJECT };
