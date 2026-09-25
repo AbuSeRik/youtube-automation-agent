@@ -47,6 +47,7 @@ class SystemTest {
       { name: 'FFmpeg Resolution', test: () => this.testFFmpegResolution() },
       { name: 'Gemini Media Provider Selection', test: () => this.testGeminiMediaProvider() },
       { name: 'Image Command and Ken Burns Stills', test: () => this.testImageCommandAndKenBurns() },
+      { name: 'Dashboard UI Translation Cache', test: () => this.testUITranslation() },
       { name: 'Slideshow Renderer', test: () => this.testSlideshowRenderer() },
       { name: 'Evergreen Template Topics', test: () => this.testEvergreenTopics() },
       { name: 'Walkthrough Module', test: () => this.testWalkthroughModule() },
@@ -2684,6 +2685,44 @@ class SystemTest {
       await fs.rm(directory, { recursive: true, force: true }).catch(() => {});
     }
     this.logger.info('Image command + Ken Burns test completed successfully');
+  }
+
+  async testUITranslation() {
+    const fs = require('fs').promises;
+    const os = require('os');
+    const { UITranslationService } = require('./utils/ui-translation-service');
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-i18n-'));
+    try {
+      await fs.writeFile(path.join(dir, 'ru.json'), JSON.stringify({ Pipeline: 'Конвейер' }));
+      const calls = [];
+      const http = { post: async (url, body, options) => {
+        calls.push({ url, body, options });
+        return { data: { translations: body.text.map(text => ({ text: `RU:${text}` })) } };
+      } };
+      const service = new UITranslationService({ apiKey: 'abc:fx', dir, http });
+
+      if (!service.validate('de', ['x']) || !service.validate('ru', []) || !service.validate('ru', ['a'.repeat(5001)])) {
+        throw new Error('Validation accepted an unsupported language, empty list or oversized text');
+      }
+      const first = await service.translate('ru', ['Pipeline', 'Schedule', 'Schedule']);
+      if (first.Pipeline !== 'Конвейер' || first.Schedule !== 'RU:Schedule') throw new Error('Cached/new translations wrong');
+      if (calls.length !== 1 || calls[0].body.text.length !== 1) throw new Error('Cached or duplicate strings were sent to DeepL');
+      if (!calls[0].url.includes('api-free.deepl.com') || calls[0].options.headers.Authorization !== 'DeepL-Auth-Key abc:fx') {
+        throw new Error('Free-tier endpoint or auth header wrong');
+      }
+      await service.translate('ru', ['Schedule']);
+      if (calls.length !== 1) throw new Error('A cached string was translated twice');
+      await service.writeChain;
+      const saved = JSON.parse(await fs.readFile(path.join(dir, 'ru.json'), 'utf8'));
+      if (saved.Schedule !== 'RU:Schedule' || saved.Pipeline !== 'Конвейер') throw new Error('Dictionary was not persisted with manual entries intact');
+
+      const offline = new UITranslationService({ apiKey: '', dir, http });
+      const partial = await offline.translate('ru', ['Unknown label']);
+      if ('Unknown label' in partial) throw new Error('Translated without a DeepL key');
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+    this.logger.info('UI translation cache test completed successfully');
   }
 
   async testSlideshowRenderer() {

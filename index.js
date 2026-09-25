@@ -27,6 +27,7 @@ const { AudienceEngagementService } = require('./utils/audience-engagement-servi
 const { GrowthExperimentService } = require('./utils/growth-experiment-service');
 const { AITextService } = require('./utils/ai-text-service');
 const { DiscoverabilityService } = require('./utils/discoverability-service');
+const { UITranslationService } = require('./utils/ui-translation-service');
 const { version } = require('./package.json');
 const chalk = require('chalk');
 
@@ -379,7 +380,21 @@ class YouTubeAutomationAgent {
     if (!process.env.API_KEY) {
       this.logger.warn('API_KEY is not set; mutating API routes are unprotected');
     }
-    
+
+    // Dashboard UI translation (DeepL, cached in dashboard/i18n/<lang>.json)
+    this.uiTranslation = this.uiTranslation || new UITranslationService();
+    this.app.post('/api/i18n/translate', this.requireAPIKey(), async (req, res) => {
+      const { lang, texts } = req.body || {};
+      const error = this.uiTranslation.validate(lang, texts);
+      if (error) return res.status(400).json({ success: false, error });
+      try {
+        res.json({ success: true, translations: await this.uiTranslation.translate(lang, texts) });
+      } catch (err) {
+        this.logger.error('UI translation failed:', err.message);
+        res.status(502).json({ success: false, error: 'Translation provider failed' });
+      }
+    });
+
     // Main dashboard route
     this.app.get('/', (req, res) => {
       res.sendFile(path.join(__dirname, 'dashboard', 'index.html'));

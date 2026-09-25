@@ -48,7 +48,10 @@ module.exports = [
         requestAnimationFrame: 'readonly',
         cancelAnimationFrame: 'readonly',
         IntersectionObserver: 'readonly',
-        PointerEvent: 'readonly'
+        PointerEvent: 'readonly',
+        Node: 'readonly',
+        NodeFilter: 'readonly',
+        MutationObserver: 'readonly'
       }
     },
     rules: {
