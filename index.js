@@ -886,7 +886,8 @@ class YouTubeAutomationAgent {
         const resolved = path.resolve(filePath);
         const dataRoot = path.resolve(__dirname, 'data');
         const experimentRoot = path.resolve(__dirname, 'uploads', 'thumbnails');
-        const allowedPath = [dataRoot, experimentRoot]
+        const studioRoot = path.join(localPipeline.PROJECT, 'production');
+        const allowedPath = [dataRoot, experimentRoot, studioRoot]
           .some(root => resolved.startsWith(`${root}${path.sep}`));
         if (!allowedPath) return res.status(403).json({ error: 'Asset path is not allowed' });
         await fs.access(resolved);
