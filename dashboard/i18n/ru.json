@@ -617,5 +617,14 @@
   "Autopilot request queued…": "Запрос автопилоту принят, ждёт запуска…",
   "Autopilot started": "Автопилот запущен",
   "Autopilot is already working on a video": "Автопилот уже делает ролик",
-  "Topic is too long (200 characters max)": "Тема слишком длинная (максимум 200 символов)"
+  "Topic is too long (200 characters max)": "Тема слишком длинная (максимум 200 символов)",
+  "Runs on": "Где делать",
+  "PC": "ПК",
+  "Cloud": "Облако",
+  "PC is off — cloud will be used": "ПК выключен — ролик будет сделан в облаке",
+  "This video will be made in the cloud": "Ролик будет сделан в облаке",
+  "This video will be made on the PC": "Ролик будет сделан на ПК",
+  "Runner is fixed once the first step has started": "Исполнителя нельзя сменить после первого шага",
+  "The PC is off and this video was started there — turn the PC on": "ПК выключен, а ролик начат на нём — включите ПК",
+  "No worker is reachable (PC off, cloud not configured?)": "Ни ПК, ни облако не отвечают"
 }

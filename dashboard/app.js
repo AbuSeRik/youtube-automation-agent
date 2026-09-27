@@ -1798,6 +1798,12 @@ function renderStudioVideo(video, log) {
     </li>`).join('');
   return `<article class="panel studio-video">
     <header class="studio-head"><h3 data-no-i18n>${escapeHTML(video.slug)}</h3>
+      ${video.cloud_available ? `<label class="studio-runner">Runs on
+        <select data-studio-runner="${video.slug}" ${video.runner_fixed || running ? 'disabled' : ''}>
+          <option value="pc" ${video.runner === 'pc' && !video.fallback ? 'selected' : ''}>PC</option>
+          <option value="cloud" ${video.runner === 'cloud' && !video.fallback ? 'selected' : ''}>Cloud</option>
+        </select></label>
+        ${video.fallback ? '<small class="status queued">PC is off — cloud will be used</small>' : ''}` : ''}
       ${video.youtube ? `<a class="button secondary" href="${escapeHTML(video.youtube.url)}" target="_blank" rel="noopener">On YouTube</a>` : ''}
       ${allDone && video.publish_kit && !video.youtube ? `<button class="button primary" data-studio-submit="${video.slug}">Send to review</button>` : ''}
       ${!allDone && !running ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="all">Run all ready steps</button>` : ''}
@@ -1806,6 +1812,18 @@ function renderStudioVideo(video, log) {
     ${log.text ? `<pre class="studio-log" data-no-i18n>${escapeHTML(log.step)}:\n${escapeHTML(log.text)}</pre>` : ''}
   </article>`;
 }
+
+document.addEventListener('change', async event => {
+  const select = event.target.closest('[data-studio-runner]');
+  if (!select) return;
+  try {
+    await api(`/api/studio/${select.dataset.studioRunner}/runner`, { method: 'POST', body: JSON.stringify({ runner: select.value }) });
+    showToast(select.value === 'cloud' ? 'This video will be made in the cloud' : 'This video will be made on the PC');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+  setTimeout(loadStudio, 800);
+});
 
 $('#autopilot-form')?.addEventListener('submit', async event => {
   event.preventDefault();

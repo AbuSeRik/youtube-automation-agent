@@ -68,7 +68,8 @@ class SystemTest {
       { name: 'Engagement Sync Schedule', test: () => this.testEngagementSyncSchedule() },
       { name: 'Growth Experiment Refresh Schedule', test: () => this.testGrowthExperimentRefreshSchedule() },
       { name: 'Studio Publish Kit Parsing', test: () => this.testStudioPublishKit() },
-      { name: 'Autopilot Request File', test: () => this.testAutopilotRequest() }
+      { name: 'Autopilot Request File', test: () => this.testAutopilotRequest() },
+      { name: 'Studio Runner PC/Cloud Fallback', test: () => this.testStudioRunnerFallback() }
     ];
 
     let passed = 0;
@@ -3615,6 +3616,47 @@ class SystemTest {
     expectStatus(() => autopilot.request({}, dir), 409); // one run at a time
     if (!autopilot.status(dir).requested) throw new Error('status must show the pending request');
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  async testStudioRunnerFallback() {
+    const os = require('os');
+    const fs = require('fs');
+    const http = require('http');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-'));
+    fs.mkdirSync(path.join(dir, 'scripts'));
+    fs.writeFileSync(path.join(dir, 'scripts', '09-test.md'), 'x');
+    const runs = [];
+    const cloud = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', c => { body += c; });
+      req.on('end', () => {
+        if (req.url === '/run') runs.push(JSON.parse(body));
+        res.setHeader('Content-Type', 'application/json');
+        res.end(req.url === '/status' ? JSON.stringify([{ slug: '09-test', steps: [] }]) : '{"started":true}');
+      });
+    });
+    await new Promise(resolve => cloud.listen(0, '127.0.0.1', resolve));
+    const saved = { ...process.env };
+    Object.assign(process.env, { STUDIO_PROJECT: dir, WORKER_URL: 'http://127.0.0.1:9', WORKER_TOKEN: 't',
+      CLOUD_WORKER_URL: `http://127.0.0.1:${cloud.address().port}`, CLOUD_WORKER_TOKEN: 't', STUDIO_RUNNER: 'pc' });
+    delete require.cache[require.resolve('./utils/local-pipeline')];
+    const lp = require('./utils/local-pipeline');
+    try {
+      const [v] = await lp.status();
+      if (v.runner !== 'cloud' || !v.fallback) throw new Error(`PC off + not started must fall back to cloud: ${JSON.stringify(v)}`);
+      const r = await lp.run('09-test', 'all');
+      if (r.runner !== 'cloud' || runs.length !== 1) throw new Error('run did not go to the cloud worker');
+      if (!lp.runnerInfo('09-test').started) throw new Error('runner must be fixed after the first step');
+      let blocked = false;
+      try { await lp.setRunner('09-test', 'pc'); } catch (error) { blocked = error.status === 409; }
+      if (!blocked) throw new Error('runner change after start must be refused');
+    } finally {
+      Object.keys(process.env).forEach(k => { if (!(k in saved)) delete process.env[k]; });
+      Object.assign(process.env, saved);
+      delete require.cache[require.resolve('./utils/local-pipeline')];
+      cloud.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   async testGrowthExperimentRefreshSchedule() {

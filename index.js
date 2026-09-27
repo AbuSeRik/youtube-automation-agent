@@ -624,6 +624,14 @@ class YouTubeAutomationAgent {
       }
     });
 
+    this.app.post('/api/studio/:slug/runner', protect, async (req, res) => {
+      try {
+        return res.json(await localPipeline.setRunner(req.params.slug, String(req.body?.runner || '')));
+      } catch (error) {
+        return res.status(error.status || 500).json({ error: error.message });
+      }
+    });
+
     this.app.post('/api/studio/:slug/submit', protect, async (req, res) => {
       try {
         return res.json(await this.submitStudioVideo(req.params.slug));
