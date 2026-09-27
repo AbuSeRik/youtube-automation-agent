@@ -1771,6 +1771,8 @@ async function loadStudio() {
   if (ui.currentView !== 'studio') return;
   try {
     const { videos } = await api('/api/studio');
+    // work in progress on top, newest first; published videos go to the bottom
+    videos.sort((a, b) => Boolean(a.youtube) - Boolean(b.youtube) || b.slug.localeCompare(a.slug));
     const logs = await Promise.all(videos.map(v => api(`/api/studio/${v.slug}/log`).catch(() => ({ text: '' }))));
     $('#studio-list').innerHTML = videos.map((v, i) => renderStudioVideo(v, logs[i])).join('');
     const pilot = await api('/api/autopilot/status');
