@@ -1014,6 +1014,24 @@ class SystemTest {
     }
     if (!blocked) throw new Error('Failed readiness did not block protected automation');
 
+    const previousStudioOnly = process.env.STUDIO_ONLY;
+    process.env.STUDIO_ONLY = 'true';
+    try {
+      const noProvider = async () => { throw new Error('No provider'); };
+      const studio = await new ProductionReadinessService(db, { credentials: {} }, {
+        probes: {
+          text: noProvider, image: noProvider, narration: noProvider,
+          videoProvider: passingProbe('Video provider'), videoAssembly: passingProbe('Video'),
+          youtube: async () => { throw new Error('token expired'); }, metadata: passingProbe('Metadata')
+        }
+      }).run();
+      if (studio.blockingFailures.join() !== 'youtube_access') {
+        throw new Error(`studio mode must only flag real problems, got ${studio.blockingFailures.join()}`);
+      }
+    } finally {
+      if (previousStudioOnly === undefined) delete process.env.STUDIO_ONLY; else process.env.STUDIO_ONLY = previousStudioOnly;
+    }
+
     const tags = normalizeTags(['#Automation', 'automation', 'bad"tag', 'x'.repeat(140)]);
     const metadata = validateYouTubeMetadata({
       title: 'A valid title',

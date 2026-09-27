@@ -69,11 +69,20 @@ class ProductionReadinessService {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'yaa-readiness-'));
     const checks = [];
 
+    // STUDIO_ONLY: text, images and voice come from the Studio pipeline, not from engine providers
+    const studioOnly = process.env.STUDIO_ONLY === 'true';
+    const notNeeded = (probe, why) => studioOnly
+      ? async () => ({ message: `Not needed in studio mode: ${why}`, details: { studioOnly: true } })
+      : probe;
+
     try {
-      checks.push(await this.executeCheck('text_provider', 'AI text provider', true, () => this.probeText()));
-      checks.push(await this.executeCheck('image_provider', 'Image provider', false, () => this.probeImage(tempDir, Boolean(options.includePaidMedia))));
+      checks.push(await this.executeCheck('text_provider', 'AI text provider', true,
+        notNeeded(() => this.probeText(), 'scripts are written in the Studio pipeline')));
+      checks.push(await this.executeCheck('image_provider', 'Image provider', false,
+        notNeeded(() => this.probeImage(tempDir, Boolean(options.includePaidMedia)), 'images are made by the Studio pipeline')));
       checks.push(await this.executeCheck('video_provider', 'AI video provider', true, () => this.probeVideoProvider(tempDir, Boolean(options.includePaidVideo))));
-      checks.push(await this.executeCheck('voice_narration', 'Voice narration', true, () => this.probeNarration(tempDir)));
+      checks.push(await this.executeCheck('voice_narration', 'Voice narration', true,
+        notNeeded(() => this.probeNarration(tempDir), 'narration is recorded by the Studio pipeline on the worker PC')));
       checks.push(await this.executeCheck('video_assembly', 'Audio/video assembly', true, () => this.probeVideoAssembly(tempDir)));
       checks.push(await this.executeCheck('youtube_access', 'YouTube channel access', true, () => this.probeYouTube()));
       checks.push(await this.executeCheck('upload_metadata', 'Upload metadata', true, () => this.probeMetadata()));
