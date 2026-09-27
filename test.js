@@ -3569,6 +3569,9 @@ class SystemTest {
     try { buildProduction('../etc'); throw new Error('path traversal slug accepted'); } catch (error) {
       if (error.status !== 404) throw error;
     }
+    const { buildInitialSceneManifest } = require('./utils/scene-repair-service');
+    const studioScenes = buildInitialSceneManifest({ timeline: { source: 'studio' }, script: { title: 'T', fullScript: 'Some narration text here.' }, assets: {} });
+    if (studioScenes.length !== 0) throw new Error('studio productions must not get a scene manifest (blocks scene_integrity)');
   }
 
   async testGrowthExperimentRefreshSchedule() {

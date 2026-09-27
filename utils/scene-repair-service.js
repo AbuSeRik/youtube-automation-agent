@@ -73,6 +73,8 @@ function durationSeconds(value, fallback = 60) {
 }
 
 function buildInitialSceneManifest(production = {}, providerResult = {}) {
+  // studio videos are cut outside the engine — there are no per-scene assets to repair
+  if (production.timeline?.source === 'studio') return [];
   const blueprints = scriptScenes(production.script || {});
   const totalDuration = durationSeconds(production.estimatedDuration || production.assets?.finalVideo?.duration, Math.max(30, blueprints.length * 8));
   const wordCounts = blueprints.map(scene => Math.max(8, scene.scriptText.trim().split(/\s+/).filter(Boolean).length));
