@@ -608,5 +608,14 @@
   "Needs:": "Нужно:",
   "On YouTube": "На YouTube",
   "Delete": "Удалить",
-  "Deleted.": "Удалено."
+  "Deleted.": "Удалено.",
+  "Autopilot": "Автопилот",
+  "Claude writes one video's script and creative files in a sandbox (about 20 minutes), then the steps run and the video goes to review. Nothing is published without Approve.": "Claude пишет сценарий и творческие файлы одного ролика в песочнице (около 20 минут), затем запускаются шаги и ролик уходит на проверку. Без «Одобрить» ничего не публикуется.",
+  "Topic (empty = next unfinished script or backlog)": "Тема (пусто = следующий недоделанный сценарий или тема из списка)",
+  "Write script": "Написать сценарий",
+  "Autopilot is working…": "Автопилот работает…",
+  "Autopilot request queued…": "Запрос автопилоту принят, ждёт запуска…",
+  "Autopilot started": "Автопилот запущен",
+  "Autopilot is already working on a video": "Автопилот уже делает ролик",
+  "Topic is too long (200 characters max)": "Тема слишком длинная (максимум 200 символов)"
 }

@@ -67,7 +67,8 @@ class SystemTest {
       { name: 'Engagement AI Provider Wiring', test: () => this.testEngagementAIProviderWiring() },
       { name: 'Engagement Sync Schedule', test: () => this.testEngagementSyncSchedule() },
       { name: 'Growth Experiment Refresh Schedule', test: () => this.testGrowthExperimentRefreshSchedule() },
-      { name: 'Studio Publish Kit Parsing', test: () => this.testStudioPublishKit() }
+      { name: 'Studio Publish Kit Parsing', test: () => this.testStudioPublishKit() },
+      { name: 'Autopilot Request File', test: () => this.testAutopilotRequest() }
     ];
 
     let passed = 0;
@@ -3596,6 +3597,24 @@ class SystemTest {
     const { buildInitialSceneManifest } = require('./utils/scene-repair-service');
     const studioScenes = buildInitialSceneManifest({ timeline: { source: 'studio' }, script: { title: 'T', fullScript: 'Some narration text here.' }, assets: {} });
     if (studioScenes.length !== 0) throw new Error('studio productions must not get a scene manifest (blocks scene_integrity)');
+  }
+
+  async testAutopilotRequest() {
+    const os = require('os');
+    const fs = require('fs');
+    const autopilot = require('./utils/autopilot');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-'));
+    const expectStatus = (fn, status) => {
+      try { fn(); } catch (error) { if (error.status === status) return; throw error; }
+      throw new Error(`expected HTTP ${status}`);
+    };
+    expectStatus(() => autopilot.request({ slug: '../etc' }, dir), 400);
+    expectStatus(() => autopilot.request({ topic: 'x'.repeat(201) }, dir), 400);
+    const queued = autopilot.request({ slug: '03-lake-dolores', topic: 'a\nb' }, dir);
+    if (!queued.queued || queued.topic !== 'a b') throw new Error('request not written / topic not cleaned');
+    expectStatus(() => autopilot.request({}, dir), 409); // one run at a time
+    if (!autopilot.status(dir).requested) throw new Error('status must show the pending request');
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 
   async testGrowthExperimentRefreshSchedule() {

@@ -1773,7 +1773,13 @@ async function loadStudio() {
     const { videos } = await api('/api/studio');
     const logs = await Promise.all(videos.map(v => api(`/api/studio/${v.slug}/log`).catch(() => ({ text: '' }))));
     $('#studio-list').innerHTML = videos.map((v, i) => renderStudioVideo(v, logs[i])).join('');
-    const busy = videos.some(v => v.steps.some(s => s.state === 'running'));
+    const pilot = await api('/api/autopilot/status');
+    const pilotBusy = pilot.running || pilot.requested;
+    $('#autopilot-state').textContent = pilot.running ? 'Autopilot is working…' : pilot.requested ? 'Autopilot request queued…' : '';
+    $('#autopilot-start').disabled = pilotBusy;
+    $('#autopilot-log').textContent = pilot.log;
+    $('#autopilot-log').classList.toggle('hidden', !pilot.log);
+    const busy = pilotBusy || videos.some(v => v.steps.some(s => s.state === 'running'));
     studioTimer = setTimeout(loadStudio, busy ? 4000 : 15000);
   } catch (error) {
     $('#studio-list').innerHTML = `<p class="empty">${escapeHTML(error.message)}</p>`;
@@ -1800,6 +1806,20 @@ function renderStudioVideo(video, log) {
     ${log.text ? `<pre class="studio-log" data-no-i18n>${escapeHTML(log.step)}:\n${escapeHTML(log.text)}</pre>` : ''}
   </article>`;
 }
+
+$('#autopilot-form')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('#autopilot-start');
+  button.disabled = true;
+  try {
+    await api('/api/autopilot/request', { method: 'POST', body: JSON.stringify({ topic: $('#autopilot-topic').value }) });
+    $('#autopilot-topic').value = '';
+    showToast('Autopilot started');
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+  setTimeout(loadStudio, 1500);
+});
 
 document.addEventListener('click', async event => {
   const run = event.target.closest('[data-studio-run]');

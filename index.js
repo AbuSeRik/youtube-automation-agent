@@ -29,6 +29,7 @@ const { AITextService } = require('./utils/ai-text-service');
 const { DiscoverabilityService } = require('./utils/discoverability-service');
 const { UITranslationService } = require('./utils/ui-translation-service');
 const localPipeline = require('./utils/local-pipeline');
+const autopilot = require('./utils/autopilot');
 const { version } = require('./package.json');
 const chalk = require('chalk');
 
@@ -602,6 +603,22 @@ class YouTubeAutomationAgent {
     this.app.post('/api/studio/:slug/:step/run', protect, async (req, res) => {
       try {
         return res.status(202).json(await localPipeline.run(req.params.slug, req.params.step));
+      } catch (error) {
+        return res.status(error.status || 500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/autopilot/status', async (_req, res) => {
+      try {
+        return res.json(autopilot.status());
+      } catch (error) {
+        return res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/autopilot/request', protect, async (req, res) => {
+      try {
+        return res.status(202).json(autopilot.request(req.body || {}));
       } catch (error) {
         return res.status(error.status || 500).json({ error: error.message });
       }

@@ -259,6 +259,16 @@
 
       <section id="studio-view" class="view">
         <div class="section-intro"><div><h2>Studio</h2><p>Our own pipeline: voice, archive photos, AI shots, music, edit, thumbnail. Creative files are prepared by Claude; buttons run the mechanical steps. A finished video goes to the review queue and is published only after Approve.</p></div></div>
+        <article class="panel studio-video" id="autopilot-panel">
+          <header class="studio-head"><h3>Autopilot</h3></header>
+          <p>Claude writes one video's script and creative files in a sandbox (about 20 minutes), then the steps run and the video goes to review. Nothing is published without Approve.</p>
+          <form id="autopilot-form" class="studio-head">
+            <input id="autopilot-topic" type="text" maxlength="200" placeholder="Topic (empty = next unfinished script or backlog)">
+            <button class="button primary" type="submit" id="autopilot-start">Write script</button>
+          </form>
+          <p id="autopilot-state"></p>
+          <pre id="autopilot-log" class="studio-log hidden" data-no-i18n></pre>
+        </article>
         <div id="studio-list" class="studio-list"></div>
       </section>
       <section id="settings-view" class="view">
