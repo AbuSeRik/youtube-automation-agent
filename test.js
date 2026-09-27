@@ -3626,13 +3626,15 @@ class SystemTest {
     fs.mkdirSync(path.join(dir, 'scripts'));
     fs.writeFileSync(path.join(dir, 'scripts', '09-test.md'), 'x');
     const runs = [];
+    let pushed = false;  // the cloud worker only lists the video after its script was pushed (server-written video)
     const cloud = http.createServer((req, res) => {
       let body = '';
       req.on('data', c => { body += c; });
       req.on('end', () => {
         if (req.url === '/run') runs.push(JSON.parse(body));
+        if (req.method === 'PUT' && req.url === '/file/09-test/script.md') pushed = true;
         res.setHeader('Content-Type', 'application/json');
-        res.end(req.url === '/status' ? JSON.stringify([{ slug: '09-test', steps: [] }]) : '{"started":true}');
+        res.end(req.url === '/status' ? JSON.stringify(pushed ? [{ slug: '09-test', steps: [] }] : []) : '{"started":true}');
       });
     });
     await new Promise(resolve => cloud.listen(0, '127.0.0.1', resolve));

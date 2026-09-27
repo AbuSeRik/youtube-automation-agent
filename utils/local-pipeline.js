@@ -115,6 +115,18 @@ async function status() {
     }
     if (!lists.pc && !lists.cloud) throw Object.assign(new Error('No worker is reachable (PC off, cloud not configured?)'), { status: 502 });
     const maps = { pc: new Map((lists.pc || []).map(v => [v.slug, v])), cloud: new Map((lists.cloud || []).map(v => [v.slug, v])) };
+    // A video written on the server (autopilot, Claude) is unknown to the workers until its files are pushed once.
+    const scriptsDir = path.join(PROJECT, 'scripts');
+    const serverSlugs = fs.existsSync(scriptsDir)
+      ? fs.readdirSync(scriptsDir).filter(f => f.endsWith('.md')).map(f => f.slice(0, -3)).filter(s => SLUG.test(s)) : [];
+    for (const slug of serverSlugs.filter(s => !maps.pc.has(s) && !maps.cloud.has(s))) {
+      const { runner } = await effectiveRunner(slug, Boolean(lists.pc));
+      if (!lists[runner]) continue;
+      await pushInputs(slug, runner).catch(() => {});
+      const fresh = await worker('GET', '/status', null, runner).then(x => x.json()).catch(() => []);
+      const v = fresh.find(x => x.slug === slug);
+      if (v) maps[runner].set(slug, v);
+    }
     const videos = [];
     for (const slug of new Set([...maps.pc.keys(), ...maps.cloud.keys()])) {
       const { runner, fallback } = await effectiveRunner(slug, Boolean(lists.pc));
