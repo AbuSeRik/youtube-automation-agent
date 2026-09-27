@@ -921,6 +921,39 @@ class Database {
     };
   }
 
+  // Removes a rejected production and its dependent rows. Media files on disk are kept.
+  async deleteRejectedProduction(productionId) {
+    const row = await this.getRow(
+      `SELECT p.status, cr.status AS review_status,
+              (SELECT COUNT(*) FROM publish_schedule WHERE production_id = p.id) AS schedules,
+              (SELECT COUNT(*) FROM growth_experiments WHERE production_id = p.id) AS experiments
+       FROM productions p LEFT JOIN content_reviews cr ON cr.production_id = p.id
+       WHERE p.id = ?`,
+      [productionId]
+    );
+    if (!row) return { deleted: false, reason: 'not_found' };
+    if (row.status !== 'rejected' && row.review_status !== 'rejected') return { deleted: false, reason: 'not_rejected' };
+    if (row.schedules || row.experiments) return { deleted: false, reason: 'has_schedule' };
+    await this.executeQuery('BEGIN TRANSACTION');
+    try {
+      await this.executeQuery(
+        'DELETE FROM discoverability_findings WHERE audit_id IN (SELECT id FROM discoverability_audits WHERE production_id = ?)',
+        [productionId]
+      );
+      for (const table of ['production_scene_revisions', 'production_scenes', 'shorts_clips', 'discoverability_audits',
+        'content_provenance', 'content_reviews', 'production_snapshots', 'media_generation_tasks',
+        'engagement_insights', 'retention_snapshots', 'performance_snapshots']) {
+        await this.executeQuery(`DELETE FROM ${table} WHERE production_id = ?`, [productionId]);
+      }
+      await this.executeQuery('DELETE FROM productions WHERE id = ?', [productionId]);
+      await this.executeQuery('COMMIT');
+    } catch (error) {
+      await this.executeQuery('ROLLBACK');
+      throw error;
+    }
+    return { deleted: true };
+  }
+
   async getPipelineOverview(limit = 50) {
     const rows = await this.getAllRows(
       `SELECT p.id, p.status, p.assets, p.timeline, p.scheduled_publish_time,

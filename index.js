@@ -1071,6 +1071,19 @@ class YouTubeAutomationAgent {
       }
     });
 
+    this.app.delete('/api/content/:productionId', protect, async (req, res) => {
+      try {
+        const result = await this.db.deleteRejectedProduction(req.params.productionId);
+        if (!result.deleted) {
+          const status = { not_found: 404, not_rejected: 409, has_schedule: 409 }[result.reason] || 400;
+          return res.status(status).json({ success: false, error: `Cannot delete: ${result.reason}` });
+        }
+        return res.json({ success: true });
+      } catch (error) {
+        return res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     this.app.patch('/api/discoverability/findings/:findingId', protect, async (req, res) => {
       try {
         const finding = await this.discoverability.reviewFinding(req.params.findingId, req.body || {});

@@ -156,7 +156,13 @@ class SystemTest {
       throw new Error('saveProductionData did not upsert the existing production row');
     }
 
-    await db.executeQuery('DELETE FROM productions WHERE id = ?', [production.id]);
+    const refused = await db.deleteRejectedProduction(production.id);
+    if (refused.deleted || refused.reason !== 'not_rejected') throw new Error('non-rejected production must not be deletable');
+    await db.saveProductionData({ ...production, status: 'rejected' });
+    const removed = await db.deleteRejectedProduction(production.id);
+    if (!removed.deleted || await db.getRow('SELECT id FROM productions WHERE id = ?', [production.id])) {
+      throw new Error('rejected production was not deleted');
+    }
     await db.close();
     this.logger.info('Production persistence test completed successfully');
   }

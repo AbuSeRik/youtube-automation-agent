@@ -270,6 +270,7 @@ function renderPipeline(items) {
       <div class="pipeline-col"><span>State</span><strong>${statusChip(state)}</strong></div>
       <div class="pipeline-col"><span>Quality</span><strong>${qualityScore(item.qualityChecks)} / 100</strong></div>
       <button class="button secondary small">${escapeHTML(next)} →</button>
+      ${state === 'rejected' ? `<button class="button secondary small" data-delete-content="${escapeHTML(item.id)}">Delete</button>` : ''}
     </article>`;
   }).join('');
 }
@@ -1204,6 +1205,14 @@ document.addEventListener('click', async event => {
   const go = event.target.closest('[data-go]');
   if (go) return switchView(go.dataset.go);
   if (event.target.closest('[data-close]')) return event.target.closest('dialog').close();
+
+  const del = event.target.closest('[data-delete-content]');
+  if (del) {
+    if (confirm('Удалить эту отклонённую запись навсегда?')) {
+      await mutate(`/api/content/${encodeURIComponent(del.dataset.deleteContent)}`, 'DELETE', undefined, 'Deleted.').catch(() => {});
+    }
+    return;
+  }
 
   const open = event.target.closest('[data-open-content]');
   if (open) return openContent(open.dataset.openContent);

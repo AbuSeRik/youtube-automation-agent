@@ -606,5 +606,7 @@
   "Sent to review queue": "Отправлено на проверку",
   "Sent, but quality checks need attention": "Отправлено, но проверки качества требуют внимания",
   "Needs:": "Нужно:",
-  "On YouTube": "На YouTube"
+  "On YouTube": "На YouTube",
+  "Delete": "Удалить",
+  "Deleted.": "Удалено."
 }
