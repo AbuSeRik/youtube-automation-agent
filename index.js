@@ -1814,6 +1814,33 @@ class YouTubeAutomationAgent {
 
   // Finished Studio video → review queue (needs_review). Publishing still requires "Approve".
   async submitStudioVideo(slug) {
+    this.studioSubmitting ??= new Set();  // the autopilot and the auto-submit timer may hit the same video at once
+    if (this.studioSubmitting.has(slug)) throw Object.assign(new Error('Already being submitted'), { status: 409 });
+    this.studioSubmitting.add(slug);
+    try {
+      const result = await this.submitStudioVideoOnce(slug);
+      localPipeline.markSubmitted(slug, result.contentId);
+      return result;
+    } finally {
+      this.studioSubmitting.delete(slug);
+    }
+  }
+
+  // Every 2 min (start()): finished Studio videos go to review without the "Send to review" button.
+  async autoSubmitStudio() {
+    try {
+      const slugs = localPipeline.autoSubmitCandidates(await localPipeline.status(), await this.db.getProductionPipeline());
+      for (const slug of slugs) {
+        await this.submitStudioVideo(slug)
+          .then(r => this.logger.info(`Studio auto-submit ${slug}: ${r.reviewStatus}`))
+          .catch(error => this.logger.warn(`Studio auto-submit ${slug}: ${error.message}`));
+      }
+    } catch (error) {
+      this.logger.warn(`Studio auto-submit skipped: ${error.message}`);  // workers unreachable → next tick
+    }
+  }
+
+  async submitStudioVideoOnce(slug) {
     const existing = (await this.db.getProductionPipeline()).find(p => p.timeline?.slug === slug && p.status !== 'rejected');
     if (existing) throw Object.assign(new Error(`Already in the queue: ${existing.id} (${existing.status})`), { status: 409 });
     await localPipeline.pullOutputs(slug);
@@ -1941,6 +1968,7 @@ class YouTubeAutomationAgent {
       process.exit(1);
     }
     
+    setInterval(() => this.autoSubmitStudio(), 2 * 60 * 1000);
     const PORT = process.env.PORT || 3456;
     this.app.listen(PORT, () => {
       console.log(chalk.green(`\n✅ YouTube Automation Agent running on port ${PORT}`));

@@ -240,4 +240,18 @@ function buildProduction(slug) {
   };
 }
 
-module.exports = { status, run, log, pullOutputs, setRunner, runnerInfo, parsePublishKit, buildProduction, PROJECT };
+// Auto-submit: a video goes to review by itself ONCE — publish/submitted.json is written on every submit (button,
+// autopilot or auto), so a rejected or deleted production is never sent again.
+const submittedFile = slug => path.join(PROJECT, 'production', slug, 'publish', 'submitted.json');
+const markSubmitted = (slug, contentId) => {
+  fs.mkdirSync(path.dirname(submittedFile(slug)), { recursive: true });
+  fs.writeFileSync(submittedFile(slug), JSON.stringify({ contentId, at: new Date().toISOString() }));
+};
+function autoSubmitCandidates(videos, productions, wasSubmitted = slug => fs.existsSync(submittedFile(slug))) {
+  const queued = new Set(productions.map(p => p.timeline?.slug).filter(Boolean));
+  return videos.filter(v => v.steps?.length && v.steps.every(s => s.state === 'done') && !v.youtube
+    && !queued.has(v.slug) && !wasSubmitted(v.slug)).map(v => v.slug);
+}
+
+module.exports = { status, run, log, pullOutputs, setRunner, runnerInfo, parsePublishKit, buildProduction, markSubmitted,
+  autoSubmitCandidates, PROJECT };

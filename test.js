@@ -3654,6 +3654,16 @@ class SystemTest {
       let blocked = false;
       try { await lp.setRunner('09-test', 'pc'); } catch (error) { blocked = error.status === 409; }
       if (!blocked) throw new Error('runner change after start must be refused');
+      // auto-submit: only finished, never-submitted, not-in-queue, unpublished videos
+      const done = slug => ({ slug, steps: [{ state: 'done' }, { state: 'done' }] });
+      const picked = lp.autoSubmitCandidates(
+        [done('01-a'), done('02-b'), { slug: '03-c', steps: [{ state: 'done' }, { state: 'running' }] },
+          { ...done('04-d'), youtube: {} }, done('05-e'), done('06-f')],
+        [{ timeline: { slug: '02-b' } }],
+        slug => slug === '05-e');
+      if (JSON.stringify(picked) !== '["01-a","06-f"]') throw new Error(`wrong auto-submit picks: ${picked}`);
+      lp.markSubmitted('09-test', 'c1');
+      if (lp.autoSubmitCandidates([done('09-test')], []).length) throw new Error('marker must stop a second auto-submit');
     } finally {
       Object.keys(process.env).forEach(k => { if (!(k in saved)) delete process.env[k]; });
       Object.assign(process.env, saved);
