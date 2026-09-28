@@ -20,18 +20,20 @@ function request({ slug = '', topic = '', runner = '' } = {}, dir) {
   if (slug && !SLUG.test(slug)) throw Object.assign(new Error('Invalid video slug'), { status: 400 });
   if (runner && !['pc', 'cloud'].includes(runner)) throw Object.assign(new Error('Invalid runner'), { status: 400 });
   if (topic.length > 200) throw Object.assign(new Error('Topic is too long (200 characters max)'), { status: 400 });
-  if (fs.existsSync(f.running) || fs.existsSync(f.request)) {
-    throw Object.assign(new Error('Autopilot is already working on a video'), { status: 409 });
-  }
+  // One JSON line per click; run.py takes the whole file and writes the scripts one after another.
+  if (queued(f) >= MAX_QUEUE) throw Object.assign(new Error(`Autopilot queue is full (${MAX_QUEUE})`), { status: 409 });
   const body = { slug, topic, runner, at: new Date().toISOString() };
-  fs.writeFileSync(f.request, JSON.stringify(body), { flag: 'wx' });
+  fs.appendFileSync(f.request, `${JSON.stringify(body)}\n`);
   return { queued: true, ...body };
 }
+
+const MAX_QUEUE = 5;
+const queued = f => (fs.existsSync(f.request) ? fs.readFileSync(f.request, 'utf8').split('\n').filter(Boolean).length : 0);
 
 function status(dir) {
   const f = files(dir);
   const log = fs.existsSync(f.log) ? fs.readFileSync(f.log, 'utf8').trimEnd().split('\n').slice(-30).join('\n') : '';
-  return { running: fs.existsSync(f.running), requested: fs.existsSync(f.request), log };
+  return { running: fs.existsSync(f.running), requested: fs.existsSync(f.request), queued: queued(f), log };
 }
 
 module.exports = { request, status };
