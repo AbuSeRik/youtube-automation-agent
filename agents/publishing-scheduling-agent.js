@@ -99,6 +99,9 @@ class PublishingSchedulingAgent {
   }
 
   async publishContent(contentId, options = {}) {
+    if (process.env.HUB_INBOX) {  // Posting Hub owns publishing (2026-09-28); this engine never uploads while it is set
+      throw Object.assign(new Error('Posting Hub publishes this channel; publishing from the studio is off'), { status: 409, code: 'HUB_PUBLISHES' });
+    }
     try {
       let productionBundle = null;
       if (this.db.getLatestReadinessRun) {

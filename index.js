@@ -29,6 +29,7 @@ const { AITextService } = require('./utils/ai-text-service');
 const { DiscoverabilityService } = require('./utils/discoverability-service');
 const { UITranslationService } = require('./utils/ui-translation-service');
 const localPipeline = require('./utils/local-pipeline');
+const { exportToHub, hubInbox } = require('./utils/hub-export');
 const autopilot = require('./utils/autopilot');
 const { version } = require('./package.json');
 const chalk = require('chalk');
@@ -539,6 +540,7 @@ class YouTubeAutomationAgent {
             automationPaused: this.scheduler ? !this.scheduler.isEnabled : true,
             agents: Object.keys(this.agents),
             autonomousRunning: Boolean(await this.db.getActiveOperatorRun()),
+            hubMode: Boolean(hubInbox()),
             videoProviders: this.agents.production?.aiVideoGenerator?.mediaGeneration?.listProviders() || []
           }
         });
@@ -741,6 +743,7 @@ class YouTubeAutomationAgent {
     this.app.post('/api/content/:productionId/shorts/:clipId/approve', protect, async (req, res) => {
       try {
         if (!this.shorts) return res.status(503).json({ error: 'Shorts repurposing requires completed setup' });
+        if (hubInbox()) return res.status(409).json({ success: false, error: 'Posting Hub publishes now; Shorts hand-off to the Hub is not built yet', code: 'HUB_PUBLISHES' });
         const result = await this.shorts.approve(req.params.productionId, req.params.clipId, req.body || {});
         return res.json({ success: true, result });
       } catch (error) {
@@ -1921,6 +1924,8 @@ class YouTubeAutomationAgent {
       throw error;
     }
 
+    if (hubInbox()) return this.handToHub(bundle, productionData, editorData, quality, input);
+
     let scheduleEntry = bundle.schedule;
     if (!scheduleEntry) {
       scheduleEntry = await this.agents.publishing.scheduleContent(productionData);
@@ -1958,6 +1963,30 @@ class YouTubeAutomationAgent {
       data: { productionId, publishTime: scheduleEntry.publishTime }
     });
     return { productionId, reviewStatus: 'approved', qualityScore: quality.score, schedule: scheduleEntry };
+  }
+
+  // Posting Hub mode: no schedule here — the video goes to the Hub inbox, the Hub picks the date and uploads.
+  async handToHub(bundle, productionData, editorData, quality, input) {
+    const video = productionData.assets?.finalVideo;
+    if (!video?.path || video.simulated) {
+      throw Object.assign(new Error('A real MP4 is required before content can be handed to Posting Hub'), { status: 409 });
+    }
+    const hub = await exportToHub(hubInbox(), {
+      productionId: bundle.id,
+      title: productionData.seo.title,
+      description: productionData.seo.description,
+      tags: productionData.seo.tags,
+      categoryId: productionData.seo.categoryId,
+      videoPath: video.path,
+      thumbnailPath: productionData.assets.thumbnail?.path,
+      synthetic: productionData.containsSyntheticMedia
+    });
+    await this.db.saveContentReview(bundle.id, {
+      status: 'approved', editorData, qualityChecks: quality.checks,
+      reviewNotes: input.reviewNotes || `Handed to Posting Hub: ${hub.packageId}`, reviewedAt: new Date().toISOString()
+    });
+    await this.db.updateProductionStatus(bundle.id, 'approved');
+    return { productionId: bundle.id, reviewStatus: 'approved', qualityScore: quality.score, hubPackage: hub.packageId };
   }
 
   async start() {
