@@ -264,6 +264,12 @@
           <p>Claude writes one video's script and creative files in a sandbox (about 20 minutes), then the steps run and the video goes to review. Nothing is published without Approve.</p>
           <form id="autopilot-form" class="studio-head">
             <input id="autopilot-topic" type="text" maxlength="200" placeholder="Topic (empty = next unfinished script or backlog)">
+            <label class="studio-runner">Runs on
+              <select id="autopilot-runner">
+                <option value="cloud">Cloud</option>
+                <option value="pc">PC</option>
+              </select>
+            </label>
             <button class="button primary" type="submit" id="autopilot-start">Write script</button>
           </form>
           <p id="autopilot-state"></p>

@@ -1832,7 +1832,7 @@ $('#autopilot-form')?.addEventListener('submit', async event => {
   const button = $('#autopilot-start');
   button.disabled = true;
   try {
-    await api('/api/autopilot/request', { method: 'POST', body: JSON.stringify({ topic: $('#autopilot-topic').value }) });
+    await api('/api/autopilot/request', { method: 'POST', body: JSON.stringify({ topic: $('#autopilot-topic').value, runner: $('#autopilot-runner').value }) });
     $('#autopilot-topic').value = '';
     showToast('Autopilot started');
   } catch (error) {

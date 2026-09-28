@@ -12,16 +12,18 @@ const files = (dir = path.join(PROJECT, 'production')) => ({
   log: path.join(dir, 'autopilot.log')
 });
 
-function request({ slug = '', topic = '' } = {}, dir) {
+function request({ slug = '', topic = '', runner = '' } = {}, dir) {
   const f = files(dir);
   slug = String(slug || '').trim();
   topic = String(topic || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+  runner = String(runner || '');
   if (slug && !SLUG.test(slug)) throw Object.assign(new Error('Invalid video slug'), { status: 400 });
+  if (runner && !['pc', 'cloud'].includes(runner)) throw Object.assign(new Error('Invalid runner'), { status: 400 });
   if (topic.length > 200) throw Object.assign(new Error('Topic is too long (200 characters max)'), { status: 400 });
   if (fs.existsSync(f.running) || fs.existsSync(f.request)) {
     throw Object.assign(new Error('Autopilot is already working on a video'), { status: 409 });
   }
-  const body = { slug, topic, at: new Date().toISOString() };
+  const body = { slug, topic, runner, at: new Date().toISOString() };
   fs.writeFileSync(f.request, JSON.stringify(body), { flag: 'wx' });
   return { queued: true, ...body };
 }

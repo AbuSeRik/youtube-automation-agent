@@ -3611,8 +3611,10 @@ class SystemTest {
     };
     expectStatus(() => autopilot.request({ slug: '../etc' }, dir), 400);
     expectStatus(() => autopilot.request({ topic: 'x'.repeat(201) }, dir), 400);
-    const queued = autopilot.request({ slug: '03-lake-dolores', topic: 'a\nb' }, dir);
+    expectStatus(() => autopilot.request({ runner: 'mars' }, dir), 400);
+    const queued = autopilot.request({ slug: '03-lake-dolores', topic: 'a\nb', runner: 'pc' }, dir);
     if (!queued.queued || queued.topic !== 'a b') throw new Error('request not written / topic not cleaned');
+    if (JSON.parse(fs.readFileSync(path.join(dir, '.autopilot-request'), 'utf8')).runner !== 'pc') throw new Error('runner choice must reach the request file');
     expectStatus(() => autopilot.request({}, dir), 409); // one run at a time
     if (!autopilot.status(dir).requested) throw new Error('status must show the pending request');
     fs.rmSync(dir, { recursive: true, force: true });
