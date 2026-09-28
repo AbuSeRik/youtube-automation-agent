@@ -1762,8 +1762,8 @@ refreshDashboard();
 setInterval(() => refreshDashboard(true), 8000);
 
 // ---- Studio: project pipeline (tools/pipeline.py via /api/studio) ----
-const STUDIO_STATE = { done: 'completed', running: 'running', ready: 'steady', blocked: 'queued' };
-const STUDIO_LABEL = { done: 'Done', running: 'Running', ready: 'Ready', blocked: 'Waiting' };
+const STUDIO_STATE = { done: 'completed', running: 'running', ready: 'steady', queued: 'queued', blocked: 'queued' };
+const STUDIO_LABEL = { done: 'Done', running: 'Running', ready: 'Ready', queued: 'In line for GPU', blocked: 'Waiting' };
 let studioTimer = null;
 
 async function loadStudio() {
@@ -1797,7 +1797,7 @@ function renderStudioVideo(video, log) {
       <span class="status ${STUDIO_STATE[s.state]}">${STUDIO_LABEL[s.state]}</span>
       <strong>${escapeHTML(s.label)}</strong>
       ${s.missing.length ? `<small><span>Needs:</span> <span data-no-i18n>${escapeHTML(s.missing.join(', '))}</span></small>` : ''}
-      ${s.state === 'ready' && !running ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="${s.step}">Run</button>` : ''}
+      ${s.state === 'ready' ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="${s.step}">Run</button>` : ''}
     </li>`).join('');
   return `<article class="panel studio-video">
     <header class="studio-head"><h3 data-no-i18n>${escapeHTML(video.slug)}</h3>
@@ -1809,7 +1809,7 @@ function renderStudioVideo(video, log) {
         ${video.fallback ? '<small class="status queued">PC is off — cloud will be used</small>' : ''}` : ''}
       ${video.youtube ? `<a class="button secondary" href="${escapeHTML(video.youtube.url)}" target="_blank" rel="noopener">On YouTube</a>` : ''}
       ${allDone && video.publish_kit && !video.youtube ? `<button class="button primary" data-studio-submit="${video.slug}">Send to review</button>` : ''}
-      ${!allDone && !running ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="all">Run all ready steps</button>` : ''}
+      ${video.steps.some(s => s.state === 'ready') ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="all">Run all ready steps</button>` : ''}
     </header>
     <ul class="studio-steps">${steps}</ul>
     ${log.text ? `<pre class="studio-log" data-no-i18n>${escapeHTML(log.step)}:\n${escapeHTML(log.text)}</pre>` : ''}
