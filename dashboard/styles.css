@@ -403,7 +403,7 @@ label:has(input:disabled) > span { color: var(--muted); }
 
 /* ============ Calendar / operator ============ */
 .calendar-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.calendar-grid > * { min-width: 0; } /* long one-line titles must ellipsize, not widen the column */
+.calendar-grid > *, .timeline-item { min-width: 0; } /* long one-line titles must ellipsize, not widen the column */
 .operator-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .85fr); gap: 16px; align-items: start; }
 .operator-side { display: grid; gap: 16px; }
 .operator-grid .settings-form { max-width: none; }
