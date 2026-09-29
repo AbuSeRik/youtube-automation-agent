@@ -588,7 +588,7 @@ class YouTubeAutomationAgent {
     // Studio: the project's own pipeline (tools/pipeline.py) — see docs/specs/panel-local-pipeline.md
     this.app.get('/api/studio', async (_req, res) => {
       try {
-        return res.json({ videos: await localPipeline.status() });
+        return res.json({ videos: (await localPipeline.status()).map(v => ({ ...v, title: localPipeline.kitTitle(v.slug) })) });
       } catch (error) {
         return res.status(500).json({ error: error.message });
       }

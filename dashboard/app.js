@@ -178,6 +178,9 @@ function renderReadiness(readiness = {}) {
     </article>`).join('') : empty('Run the verified check to inspect every production dependency.');
 }
 
+// Studio production ids are studio-<slug>-<timestamp>; the slug is the name the Studio list shows
+const studioSlug = id => String(id).match(/^studio-(.+)-\d+$/)?.[1] || '';
+
 function renderReviews(reviews) {
   const container = $('#review-list');
   if (!reviews.length) {
@@ -187,7 +190,7 @@ function renderReviews(reviews) {
   container.innerHTML = reviews.slice(0, 5).map(item => `
     <article class="review-card">
       ${item.hasThumbnail ? `<img class="review-thumb" src="/api/content/${encodeURIComponent(item.id)}/asset/thumbnail" alt="">` : '<div class="review-thumb"></div>'}
-      <div class="review-meta"><strong>${escapeHTML(item.title)}</strong><div class="meta-line">${statusChip(item.review_status)} · Quality ${qualityScore(item.qualityChecks)}%</div></div>
+      <div class="review-meta"><strong>${escapeHTML(item.title)}</strong><div class="meta-line">${statusChip(item.review_status)} · Quality ${qualityScore(item.qualityChecks)}%${studioSlug(item.id) ? ` · <span data-no-i18n>${escapeHTML(studioSlug(item.id))}</span>` : ''}</div></div>
       <button class="button secondary small" data-open-content="${escapeHTML(item.id)}">Review</button>
     </article>`).join('');
 }
@@ -1801,7 +1804,7 @@ function renderStudioVideo(video, log) {
       ${s.state === 'ready' ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="${s.step}">Run</button>` : ''}
     </li>`).join('');
   return `<article class="panel studio-video">
-    <header class="studio-head"><h3 data-no-i18n>${escapeHTML(video.slug)}</h3>
+    <header class="studio-head"><h3 data-no-i18n>${escapeHTML(video.title || video.slug)}${video.title ? `<small class="meta-line"> · ${escapeHTML(video.slug)}</small>` : ''}</h3>
       ${video.cloud_available ? `<label class="studio-runner">Runs on
         <select data-studio-runner="${video.slug}" ${video.runner_fixed || running ? 'disabled' : ''}>
           <option value="pc" ${video.runner === 'pc' && !video.fallback ? 'selected' : ''}>PC</option>

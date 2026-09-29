@@ -207,6 +207,11 @@ function parsePublishKit(markdown) {
   return { title, description: text('description'), tags };
 }
 
+// YouTube title from publish/<slug>.md, shown in Studio so it matches review and the Hub; null until the kit exists
+function kitTitle(slug) {
+  try { return parsePublishKit(fs.readFileSync(path.join(PROJECT, 'publish', `${slug}.md`), 'utf8')).title; } catch { return null; }
+}
+
 function buildProduction(slug) {
   assertSlug(slug);
   const dir = path.join(PROJECT, 'production', slug);
@@ -253,5 +258,5 @@ function autoSubmitCandidates(videos, productions, wasSubmitted = slug => fs.exi
     && !queued.has(v.slug) && !wasSubmitted(v.slug)).map(v => v.slug);
 }
 
-module.exports = { status, run, log, pullOutputs, setRunner, runnerInfo, parsePublishKit, buildProduction, markSubmitted,
+module.exports = { status, run, log, pullOutputs, setRunner, runnerInfo, parsePublishKit, kitTitle, buildProduction, markSubmitted,
   autoSubmitCandidates, PROJECT };
