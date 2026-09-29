@@ -1783,7 +1783,7 @@ async function loadStudio() {
     const pilotBusy = pilot.running || pilot.requested;
     $('#autopilot-state').textContent = [pilot.running ? 'Autopilot is writing a script…' : '',
       pilot.queued ? `Scripts queued: ${pilot.queued}` : ''].filter(Boolean).join(' · ');
-    $('#autopilot-start').disabled = pilot.queued >= 5;
+    $('#autopilot-start').disabled = pilot.queued >= 10;
     $('#autopilot-log').textContent = pilot.log;
     $('#autopilot-log').classList.toggle('hidden', !pilot.log);
     const busy = pilotBusy || videos.some(v => v.steps.some(s => s.state === 'running'));
@@ -1848,9 +1848,14 @@ $('#autopilot-form')?.addEventListener('submit', async event => {
   const button = $('#autopilot-start');
   button.disabled = true;
   try {
-    await api('/api/autopilot/request', { method: 'POST', body: JSON.stringify({ topic: $('#autopilot-topic').value, runner: $('#autopilot-runner').value }) });
+    // a typed topic is one video; empty topic × N = the next N from backlog, written one after another
+    const topic = $('#autopilot-topic').value;
+    const count = topic.trim() ? 1 : Number($('#autopilot-count').value);
+    for (let i = 0; i < count; i += 1) {
+      await api('/api/autopilot/request', { method: 'POST', body: JSON.stringify({ topic, runner: $('#autopilot-runner').value }) });
+    }
     $('#autopilot-topic').value = '';
-    showToast('Autopilot started');
+    showToast(count > 1 ? `Scripts queued: ${count}` : 'Autopilot started');
   } catch (error) {
     showToast(error.message, 'error');
   }

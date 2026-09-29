@@ -27,7 +27,7 @@ function request({ slug = '', topic = '', runner = '' } = {}, dir) {
   return { queued: true, ...body };
 }
 
-const MAX_QUEUE = 5;
+const MAX_QUEUE = 10;
 const queued = f => (fs.existsSync(f.request) ? fs.readFileSync(f.request, 'utf8').split('\n').filter(Boolean).length : 0);
 
 function status(dir) {
