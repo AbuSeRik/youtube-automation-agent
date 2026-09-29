@@ -1781,7 +1781,7 @@ async function loadStudio() {
     $('#studio-list').innerHTML = videos.map((v, i) => renderStudioVideo(v, logs[i])).join('');
     const pilot = await api('/api/autopilot/status');
     const pilotBusy = pilot.running || pilot.requested;
-    $('#autopilot-state').textContent = [pilot.running ? 'Autopilot is writing a script…' : '',
+    $('#autopilot-state').textContent = [pilot.running ? (pilot.total > 1 ? `Autopilot is writing script ${pilot.current} of ${pilot.total}…` : 'Autopilot is writing a script…') : '',
       pilot.queued ? `Scripts queued: ${pilot.queued}` : ''].filter(Boolean).join(' · ');
     $('#autopilot-start').disabled = pilot.queued >= 10;
     $('#autopilot-log').textContent = pilot.log;

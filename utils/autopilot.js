@@ -32,8 +32,13 @@ const queued = f => (fs.existsSync(f.request) ? fs.readFileSync(f.request, 'utf8
 
 function status(dir) {
   const f = files(dir);
-  const log = fs.existsSync(f.log) ? fs.readFileSync(f.log, 'utf8').trimEnd().split('\n').slice(-30).join('\n') : '';
-  return { running: fs.existsSync(f.running), requested: fs.existsSync(f.request), queued: queued(f), log };
+  const lines = fs.existsSync(f.log) ? fs.readFileSync(f.log, 'utf8').trimEnd().split('\n') : [];
+  const log = lines.slice(-30).join('\n');
+  const running = fs.existsSync(f.running);
+  // run.py takes the whole request file at start and logs "queue: script i of N" before each one
+  const batch = running && [...lines.slice(-300).join('\n').matchAll(/queue: script (\d+) of (\d+)/g)].pop();
+  return { running, requested: fs.existsSync(f.request), queued: queued(f), log,
+    current: batch ? Number(batch[1]) : 0, total: batch ? Number(batch[2]) : 0 };
 }
 
 module.exports = { request, status };
