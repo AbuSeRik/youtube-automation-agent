@@ -1048,6 +1048,9 @@ body.scrolled .topbar { border-color: rgba(151, 167, 195, .32); }
 .studio-list { display: grid; gap: 16px; }
 .studio-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .studio-head h3 { margin: 0 auto 0 0; }
+.studio-summary { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.studio-summary h3 { margin: 0 auto 0 0; font-size: 15px; }
+details[open] > .studio-summary { margin-bottom: 12px; }
 .studio-steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
 .studio-step { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .studio-step small { opacity: .7; }

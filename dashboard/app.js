@@ -1793,6 +1793,12 @@ async function loadStudio() {
   }
 }
 
+const studioOpen = new Set();
+document.addEventListener('toggle', event => {
+  const slug = event.target.dataset?.studioSlug;
+  if (slug) event.target.open ? studioOpen.add(slug) : studioOpen.delete(slug);
+}, true);  // toggle does not bubble
+
 function renderStudioVideo(video, log) {
   const running = video.steps.some(s => s.state === 'running');
   const allDone = video.steps.every(s => s.state === 'done');
@@ -1803,8 +1809,8 @@ function renderStudioVideo(video, log) {
       ${s.missing.length ? `<small><span>Needs:</span> <span data-no-i18n>${escapeHTML(s.missing.join(', '))}</span></small>` : ''}
       ${s.state === 'ready' ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="${s.step}">Run</button>` : ''}
     </li>`).join('');
-  return `<article class="panel studio-video">
-    <header class="studio-head"><h3 data-no-i18n>${escapeHTML(video.title || video.slug)}${video.title ? `<small class="meta-line"> · ${escapeHTML(video.slug)}</small>` : ''}</h3>
+  const name = `<h3 data-no-i18n>${escapeHTML(video.title || video.slug)}${video.title ? `<small class="meta-line"> · ${escapeHTML(video.slug)}</small>` : ''}</h3>`;
+  const body = `<header class="studio-head">${allDone ? '' : name}
       ${video.cloud_available ? `<label class="studio-runner">Runs on
         <select data-studio-runner="${video.slug}" ${video.runner_fixed || running ? 'disabled' : ''}>
           <option value="pc" ${video.runner === 'pc' && !video.fallback ? 'selected' : ''}>PC</option>
@@ -1816,8 +1822,12 @@ function renderStudioVideo(video, log) {
       ${video.steps.some(s => s.state === 'ready') ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="all">Run all ready steps</button>` : ''}
     </header>
     <ul class="studio-steps">${steps}</ul>
-    ${log.text ? `<pre class="studio-log" data-no-i18n>${escapeHTML(log.step)}:\n${escapeHTML(log.text)}</pre>` : ''}
-  </article>`;
+    ${log.text ? `<pre class="studio-log" data-no-i18n>${escapeHTML(log.step)}:\n${escapeHTML(log.text)}</pre>` : ''}`;
+  // finished videos fold into one line; a click unfolds them and they stay open across the 15 s refresh
+  return allDone
+    ? `<details class="panel studio-video" data-studio-slug="${video.slug}" ${studioOpen.has(video.slug) ? 'open' : ''}>
+        <summary class="studio-summary">${name}<span class="status completed">Done</span></summary>${body}</details>`
+    : `<article class="panel studio-video">${body}</article>`;
 }
 
 document.addEventListener('change', async event => {
