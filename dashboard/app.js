@@ -1810,7 +1810,7 @@ function renderStudioVideo(video, log) {
       ${s.state === 'ready' ? `<button class="button secondary" data-studio-run="${video.slug}" data-step="${s.step}">Run</button>` : ''}
     </li>`).join('');
   const name = `<h3 data-no-i18n>${escapeHTML(video.title || video.slug)}${video.title ? `<small class="meta-line"> · ${escapeHTML(video.slug)}</small>` : ''}</h3>`;
-  const body = `<header class="studio-head">${allDone ? '' : name}
+  const body = `<header class="studio-head">
       ${video.cloud_available ? `<label class="studio-runner">Runs on
         <select data-studio-runner="${video.slug}" ${video.runner_fixed || running ? 'disabled' : ''}>
           <option value="pc" ${video.runner === 'pc' && !video.fallback ? 'selected' : ''}>PC</option>
@@ -1823,11 +1823,12 @@ function renderStudioVideo(video, log) {
     </header>
     <ul class="studio-steps">${steps}</ul>
     ${log.text ? `<pre class="studio-log" data-no-i18n>${escapeHTML(log.step)}:\n${escapeHTML(log.text)}</pre>` : ''}`;
-  // finished videos fold into one line; a click unfolds them and they stay open across the 15 s refresh
-  return allDone
-    ? `<details class="panel studio-video" data-studio-slug="${video.slug}" ${studioOpen.has(video.slug) ? 'open' : ''}>
-        <summary class="studio-summary">${name}<span class="status completed">Done</span></summary>${body}</details>`
-    : `<article class="panel studio-video">${body}</article>`;
+  // every video folds into one line; a click unfolds it and it stays open across the 15 s refresh
+  const doneCount = video.steps.filter(s => s.state === 'done').length;
+  const chip = allDone ? '<span class="status completed">Done</span>'
+    : `<span class="status running">In progress</span><small data-no-i18n>${doneCount}/${video.steps.length}</small>`;
+  return `<details class="panel studio-video" data-studio-slug="${video.slug}" ${studioOpen.has(video.slug) ? 'open' : ''}>
+    <summary class="studio-summary">${name}${chip}</summary>${body}</details>`;
 }
 
 document.addEventListener('change', async event => {
