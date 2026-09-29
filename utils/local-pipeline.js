@@ -85,7 +85,8 @@ async function setRunner(slug, runner) {
   const info = runnerInfo(slug);
   if (info.started) throw Object.assign(new Error('Runner is fixed once the first step has started'), { status: 409 });
   saveRunner(slug, { ...info, runner });
-  if (runner === 'cloud') await pushInputs(slug, 'cloud');  // so the cloud worker lists the video right away
+  // so the cloud worker lists the video right away; if the cloud is busy rendering, status() pushes it later
+  if (runner === 'cloud') await pushInputs(slug, 'cloud').catch(() => {});
   return { slug, runner };
 }
 
