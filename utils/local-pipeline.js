@@ -40,7 +40,8 @@ async function worker(method, route, body, runner = 'pc') {
     method,
     headers: { Authorization: `Bearer ${w.token}`, ...(body && !Buffer.isBuffer(body) ? { 'Content-Type': 'application/json' } : {}) },
     body: body && !Buffer.isBuffer(body) ? JSON.stringify(body) : body,
-    signal: AbortSignal.timeout(method === 'GET' && route.startsWith('/file/') ? 600000 : route === '/status' ? 10000 : 30000)
+    signal: AbortSignal.timeout(method === 'GET' && route.startsWith('/file/') ? 600000 : route === '/status' ? (runner === 'cloud' ? 60000 : 10000) : 30000)
+    // ponytail: cloud status stats ~1300 files on the NAS (~15 s at 37 videos, +0.4 s per video); cache it in the worker if it nears 60 s
   });
   if (!response.ok) throw Object.assign(new Error(`${runner} worker ${route}: HTTP ${response.status}`), { status: 502 });
   return response;
