@@ -1778,7 +1778,15 @@ async function loadStudio() {
     // work in progress on top, newest first; published videos go to the bottom
     videos.sort((a, b) => Boolean(a.youtube) - Boolean(b.youtube) || b.slug.localeCompare(a.slug));
     const logs = await Promise.all(videos.map(v => api(`/api/studio/${v.slug}/log`).catch(() => ({ text: '' }))));
-    $('#studio-list').innerHTML = videos.map((v, i) => renderStudioVideo(v, logs[i])).join('');
+    const relogin = videos.filter(v => v.steps.some(s => s.login)).map(v => v.slug);
+    $('#studio-list').innerHTML = (relogin.length ? `<div class="panel studio-login">
+        <strong>AI pictures stopped: the Codex login on the server has expired</strong>
+        <p>Videos waiting: <span data-no-i18n>${relogin.map(escapeHTML).join(', ')}</span></p>
+        <p>Open a terminal and run, one after another:</p>
+        <pre data-no-i18n>ssh docinternal\ncodex login --device-auth</pre>
+        <p>Open the link it shows, enter the code and sign in to ChatGPT. Then press the button.</p>
+        <button class="button primary" data-studio-relogin="${relogin.join(',')}">I signed in — continue</button>
+      </div>` : '') + videos.map((v, i) => renderStudioVideo(v, logs[i])).join('');
     const pilot = await api('/api/autopilot/status');
     const pilotBusy = pilot.running || pilot.requested;
     $('#autopilot-state').textContent = [pilot.running ? (pilot.total > 1 ? `Autopilot is writing script ${pilot.current} of ${pilot.total}…` : 'Autopilot is writing a script…') : '',
@@ -1865,9 +1873,14 @@ $('#autopilot-form')?.addEventListener('submit', async event => {
 document.addEventListener('click', async event => {
   const run = event.target.closest('[data-studio-run]');
   const submit = event.target.closest('[data-studio-submit]');
-  if (!run && !submit) return;
+  const relogin = event.target.closest('[data-studio-relogin]');
+  if (!run && !submit && !relogin) return;
   try {
-    if (run) {
+    if (relogin) {
+      relogin.disabled = true;
+      for (const slug of relogin.dataset.studioRelogin.split(',')) await api(`/api/studio/${slug}/all/run`, { method: 'POST' });
+      showToast('Pictures are being made again');
+    } else if (run) {
       await api(`/api/studio/${run.dataset.studioRun}/${run.dataset.step}/run`, { method: 'POST' });
       showToast('Step started');
     } else {
